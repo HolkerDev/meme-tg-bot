@@ -69,6 +69,7 @@ def make_log_group_message(
 def build_app(settings: Settings) -> Application[Any, Any, Any, Any, Any, Any]:
     handlers = build_handlers(
         instagram_username=settings.instagram_username,
+        instagram_password=settings.instagram_password,
         instagram_session_file=settings.instagram_session_file,
     )
     app = ApplicationBuilder().token(settings.telegram_bot_token).build()

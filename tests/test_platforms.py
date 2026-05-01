@@ -1,6 +1,12 @@
 import pytest
 
-from meme_nova.platforms import Platform, build_handlers, detect_platform, find_handler
+from meme_nova.platforms import (
+    Platform,
+    _extract_instagram_shortcode,
+    build_handlers,
+    detect_platform,
+    find_handler,
+)
 
 HANDLERS = build_handlers()
 
@@ -10,6 +16,7 @@ HANDLERS = build_handlers()
     [
         ("https://www.instagram.com/p/abc/", Platform.INSTAGRAM),
         ("https://instagram.com/reel/xyz", Platform.INSTAGRAM),
+        ("https://www.instagram.com/reels/DXuotVMDZ-F/", Platform.INSTAGRAM),
         ("https://instagr.am/p/abc", Platform.INSTAGRAM),
         ("https://www.tiktok.com/@user/video/123", Platform.TIKTOK),
         ("https://vm.tiktok.com/abc", Platform.TIKTOK),
@@ -34,6 +41,21 @@ def test_detect_platform(url: str, expected: Platform) -> None:
 
 def test_find_handler_returns_none_for_unknown() -> None:
     assert find_handler(HANDLERS, "https://example.com") is None
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://www.instagram.com/p/abc123/", "abc123"),
+        ("https://www.instagram.com/reel/DX-uotV/", "DX-uotV"),
+        ("https://www.instagram.com/reels/DXuotVMDZ-F/", "DXuotVMDZ-F"),
+        ("https://www.instagram.com/tv/Abc_42/", "Abc_42"),
+        ("https://www.instagram.com/u/holkeres/", None),
+        ("https://example.com/p/abc/", None),
+    ],
+)
+def test_extract_instagram_shortcode(url: str, expected: str | None) -> None:
+    assert _extract_instagram_shortcode(url) == expected
 
 
 async def test_default_handler_process_logs_only() -> None:

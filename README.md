@@ -13,16 +13,30 @@ cp .env.example .env
 ### Optional: Instagram login
 
 Public posts often work without login but Instagram rate-limits anonymous fetches.
-To use a logged-in session:
+Use a burner account, not your main.
+
+Two ways to authenticate:
+
+**A. Interactive CLI login (preferred, supports 2FA):**
 
 ```bash
 uv run instaloader -l YOUR_INSTAGRAM_USERNAME
 # completes interactive login, writes session file to instaloader's default path.
 ```
 
-Then set `INSTAGRAM_USERNAME` in `.env` (and optionally `INSTAGRAM_SESSION_FILE` if you
-moved the file). The bot loads the session at startup; if missing it logs a warning and
-proceeds unauthenticated.
+Then set `INSTAGRAM_USERNAME` in `.env`.
+
+**B. Username + password from env (no 2FA support):**
+
+Set `INSTAGRAM_USERNAME` and `INSTAGRAM_PASSWORD`. On startup the bot tries the
+session file first; if missing it logs in with the password and saves a session
+file so subsequent runs don't re-login. Programmatic login is more block-prone
+than option A — Instagram may flag suspicious activity, requiring a manual
+checkpoint clearance via the app/web. If the account has 2FA, this path will
+fail and you must use option A.
+
+`INSTAGRAM_SESSION_FILE` is optional — leave empty to use instaloader's default
+location, or set an absolute path if you stored the file elsewhere.
 
 ## Run
 
