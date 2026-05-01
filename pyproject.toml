@@ -1,0 +1,45 @@
+[project]
+name = "meme-nova"
+version = "0.1.0"
+description = "Telegram bot."
+readme = "README.md"
+authors = [
+    { name = "HolkerDev", email = "mykola.penkovskyi@tooltime.de" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "instaloader>=4.15.1",
+    "python-dotenv>=1.2.2",
+    "python-telegram-bot[rate-limiter]>=22.7",
+]
+
+[project.scripts]
+meme-nova = "meme_nova:main"
+
+[build-system]
+requires = ["uv_build>=0.9.5,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.20.2",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "ruff>=0.15.12",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
