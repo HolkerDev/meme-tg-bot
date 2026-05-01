@@ -1,20 +1,19 @@
 import asyncio
 import logging
 import tempfile
-from io import BytesIO
 from pathlib import Path
 
 from telegram import Message
-from telegram.constants import ChatAction
 from yt_dlp import YoutubeDL
-from yt_dlp.utils import match_filter_func
+from yt_dlp.utils import DownloadError, UnsupportedError, match_filter_func
 
+from . import gallery_dl
+from ._media import send_media_bytes
 from .base import (
     DEFAULT_MAX_DURATION_SECONDS,
     TELEGRAM_BOT_UPLOAD_LIMIT_BYTES,
     Platform,
     host_matches,
-    safe_chat_action,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,16 +37,33 @@ class YtDlpHandler:
     async def process(self, url: str, message: Message) -> bool:
         try:
             data = await asyncio.to_thread(self._download, url)
+        except DownloadError as e:
+            if isinstance(e.__context__, UnsupportedError):
+                return await self._fallback_gallery_dl(url, message)
+            logger.exception("yt-dlp download failed for %s", url)
+            return False
         except Exception:
             logger.exception("yt-dlp download failed for %s", url)
             return False
         if not data:
             return True
         try:
-            await safe_chat_action(message, ChatAction.UPLOAD_VIDEO)
-            await message.reply_video(video=BytesIO(data))
+            await send_media_bytes(message, [(data, True)])
         except Exception:
             logger.exception("yt-dlp send failed for %s", url)
+            return False
+        return True
+
+    async def _fallback_gallery_dl(self, url: str, message: Message) -> bool:
+        logger.info("yt-dlp unsupported, trying gallery-dl url=%s", url)
+        items = await asyncio.to_thread(gallery_dl.download_media, url, self._max_filesize)
+        if not items:
+            logger.info("gallery-dl found no media url=%s", url)
+            return True
+        try:
+            await send_media_bytes(message, items)
+        except Exception:
+            logger.exception("gallery-dl send failed url=%s", url)
             return False
         return True
 
