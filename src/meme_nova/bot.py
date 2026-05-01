@@ -146,10 +146,7 @@ async def retry_worker(
 
 
 def _format_stats(top: list[TopUser]) -> str:
-    lines = ["Weekly link stats:"]
-    for i, u in enumerate(top, start=1):
-        lines.append(f"{i}. {u.display_name} — {u.count}")
-    return "\n".join(lines)
+    return "\n".join(f"{i}. {u.display_name} — {u.count}" for i, u in enumerate(top, start=1))
 
 
 async def _publish_due_stats(stats: StatsStore, bot: Bot) -> None:
