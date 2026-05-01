@@ -19,8 +19,11 @@ from meme_nova.platforms import Platform, PlatformHandler, build_handlers, find_
 from meme_nova.platforms.base import safe_chat_action
 from meme_nova.retry_queue import POLL_INTERVAL_SECONDS, RetryItem, RetryQueue
 from meme_nova.settings import Settings
+from meme_nova.stats_store import StatsStore, TopUser
 
 logger = logging.getLogger(__name__)
+
+STATS_POLL_INTERVAL_SECONDS = 3600.0
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -43,9 +46,19 @@ def extract_urls(message: Message) -> list[str]:
     return urls
 
 
+def _display_name(update: Update) -> str:
+    user = update.effective_user
+    if not user:
+        return "user"
+    if user.username:
+        return f"@{user.username}"
+    return user.first_name or "user"
+
+
 def make_log_group_message(
     handlers: tuple[PlatformHandler, ...],
     queue: RetryQueue,
+    stats: StatsStore,
 ) -> Callable[[Update, ContextTypes.DEFAULT_TYPE], Coroutine[Any, Any, None]]:
     async def log_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         msg = update.effective_message
@@ -62,17 +75,21 @@ def make_log_group_message(
             user.username if user else None,
             content,
         )
+        had_valid_link = False
         for url in extract_urls(msg):
             handler = find_handler(handlers, url)
             platform = handler.platform if handler else Platform.UNKNOWN
             logger.info("link platform=%s url=%s", platform.value, url)
             if not handler:
                 continue
+            had_valid_link = True
             await safe_chat_action(msg, ChatAction.TYPING)
             ok = await handler.process(url, msg)
             if not ok:
                 await queue.enqueue(url, chat.id, chat.type, msg.message_id)
                 logger.info("queued retry url=%s platform=%s", url, platform.value)
+        if had_valid_link and user:
+            await stats.record_post(chat.id, user.id, _display_name(update))
 
     return log_group_message
 
@@ -128,16 +145,48 @@ async def retry_worker(
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
 
+def _format_stats(top: list[TopUser]) -> str:
+    lines = ["Weekly link stats:"]
+    for i, u in enumerate(top, start=1):
+        lines.append(f"{i}. {u.display_name} — {u.count}")
+    return "\n".join(lines)
+
+
+async def _publish_due_stats(stats: StatsStore, bot: Bot) -> None:
+    for chat in await stats.due_chats():
+        top = await stats.top_users(chat.chat_id, chat.last_published_at)
+        if top:
+            try:
+                await bot.send_message(chat_id=chat.chat_id, text=_format_stats(top))
+            except Exception:
+                logger.exception("failed to send stats to chat=%s", chat.chat_id)
+                continue
+        await stats.mark_published(chat.chat_id)
+
+
+async def stats_worker(stats: StatsStore, bot: Bot) -> None:
+    while True:
+        try:
+            await _publish_due_stats(stats, bot)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("stats worker iteration failed")
+        await asyncio.sleep(STATS_POLL_INTERVAL_SECONDS)
+
+
 def build_app(settings: Settings) -> Application[Any, Any, Any, Any, Any, Any]:
     handlers = build_handlers(
         instagram_username=settings.instagram_username,
         instagram_password=settings.instagram_password,
         instagram_session_file=settings.instagram_session_file,
     )
-    queue = RetryQueue(settings.retry_db_path)
+    queue = RetryQueue(settings.db_path)
+    stats = StatsStore(settings.db_path)
 
     async def post_init(app: Application[Any, Any, Any, Any, Any, Any]) -> None:
         app.create_task(retry_worker(queue, handlers, app.bot))
+        app.create_task(stats_worker(stats, app.bot))
 
     app = (
         ApplicationBuilder()
@@ -147,7 +196,9 @@ def build_app(settings: Settings) -> Application[Any, Any, Any, Any, Any, Any]:
     )
     app.add_handler(CommandHandler("start", start))
     group_filter = filters.ChatType.GROUPS & ~filters.COMMAND & ~filters.StatusUpdate.ALL
-    app.add_handler(MessageHandler(group_filter, make_log_group_message(handlers, queue)))
+    app.add_handler(
+        MessageHandler(group_filter, make_log_group_message(handlers, queue, stats))
+    )
     app.add_handler(
         MessageHandler(filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND, echo)
     )
