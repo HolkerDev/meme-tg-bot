@@ -1,65 +1,17 @@
 import asyncio
 import logging
 import re
-import tempfile
-from dataclasses import dataclass
-from enum import StrEnum
 from io import BytesIO
-from pathlib import Path
-from typing import Protocol
-from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 import instaloader
 from telegram import InputMediaPhoto, InputMediaVideo, Message
-from yt_dlp import YoutubeDL
-from yt_dlp.utils import match_filter_func
+
+from .base import DOWNLOAD_TIMEOUT_SECONDS, MEDIA_GROUP_LIMIT, Platform, host_matches
 
 logger = logging.getLogger(__name__)
 
-DOWNLOAD_TIMEOUT_SECONDS = 30
-MEDIA_GROUP_LIMIT = 10
 INSTAGRAM_SHORTCODE_RE = re.compile(r"instagram\.com/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)")
-TELEGRAM_BOT_UPLOAD_LIMIT_BYTES = 50 * 1024 * 1024
-DEFAULT_MAX_DURATION_SECONDS = 600
-
-
-class Platform(StrEnum):
-    INSTAGRAM = "instagram"
-    TIKTOK = "tiktok"
-    YOUTUBE = "youtube"
-    TWITTER = "twitter"
-    REDDIT = "reddit"
-    FACEBOOK = "facebook"
-    UNKNOWN = "unknown"
-
-
-class PlatformHandler(Protocol):
-    @property
-    def platform(self) -> Platform: ...
-
-    def matches(self, url: str) -> bool: ...
-
-    async def process(self, url: str, message: Message) -> None: ...
-
-
-def _host_matches(url: str, hosts: tuple[str, ...]) -> bool:
-    host = (urlparse(url).hostname or "").lower()
-    if not host:
-        return False
-    return any(host == h or host.endswith("." + h) for h in hosts)
-
-
-@dataclass(frozen=True)
-class HostBasedHandler:
-    platform: Platform
-    hosts: tuple[str, ...]
-
-    def matches(self, url: str) -> bool:
-        return _host_matches(url, self.hosts)
-
-    async def process(self, url: str, message: Message) -> None:
-        logger.info("platform=%s url=%s (no handler implementation)", self.platform.value, url)
 
 
 def _extract_instagram_shortcode(url: str) -> str | None:
@@ -166,7 +118,7 @@ class InstagramHandler:
         logger.info("instagram login successful for %s; session saved", username)
 
     def matches(self, url: str) -> bool:
-        return _host_matches(url, self.hosts)
+        return host_matches(url, self.hosts)
 
     async def process(self, url: str, message: Message) -> None:
         shortcode = _extract_instagram_shortcode(url)
@@ -211,93 +163,3 @@ class InstagramHandler:
             else:
                 media_group.append(InputMediaPhoto(media=BytesIO(data)))
         await message.reply_media_group(media=media_group)
-
-
-class YtDlpHandler:
-    def __init__(
-        self,
-        platform: Platform,
-        hosts: tuple[str, ...],
-        max_duration_seconds: int = DEFAULT_MAX_DURATION_SECONDS,
-        max_filesize_bytes: int = TELEGRAM_BOT_UPLOAD_LIMIT_BYTES,
-    ) -> None:
-        self._platform = platform
-        self._hosts = hosts
-        self._max_duration = max_duration_seconds
-        self._max_filesize = max_filesize_bytes
-
-    @property
-    def platform(self) -> Platform:
-        return self._platform
-
-    def matches(self, url: str) -> bool:
-        return _host_matches(url, self._hosts)
-
-    async def process(self, url: str, message: Message) -> None:
-        try:
-            data = await asyncio.to_thread(self._download, url)
-        except Exception:
-            logger.exception("yt-dlp download failed for %s", url)
-            return
-        if not data:
-            return
-        try:
-            await message.reply_video(video=BytesIO(data))
-        except Exception:
-            logger.exception("yt-dlp send failed for %s", url)
-
-    def _download(self, url: str) -> bytes | None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp = Path(tmpdir)
-            opts = {
-                "format": "b[height<=720][ext=mp4]/b[ext=mp4]/b",
-                "outtmpl": str(tmp / "%(id)s.%(ext)s"),
-                "quiet": True,
-                "no_warnings": True,
-                "noprogress": True,
-                "noplaylist": True,
-                "max_filesize": self._max_filesize,
-                "match_filter": match_filter_func(f"duration <=? {self._max_duration}"),
-            }
-            with YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-            if info is None:
-                return None
-            files = [p for p in tmp.iterdir() if p.is_file()]
-            if not files:
-                return None
-            file_path = files[0]
-            if file_path.stat().st_size > self._max_filesize:
-                return None
-            return file_path.read_bytes()
-
-
-def build_handlers(
-    instagram_username: str | None = None,
-    instagram_password: str | None = None,
-    instagram_session_file: str | None = None,
-) -> tuple[PlatformHandler, ...]:
-    return (
-        InstagramHandler(
-            username=instagram_username,
-            password=instagram_password,
-            session_file=instagram_session_file,
-        ),
-        YtDlpHandler(Platform.TIKTOK, ("tiktok.com",)),
-        YtDlpHandler(Platform.YOUTUBE, ("youtube.com", "youtu.be")),
-        HostBasedHandler(Platform.TWITTER, ("twitter.com", "x.com", "t.co")),
-        HostBasedHandler(Platform.REDDIT, ("reddit.com", "redd.it")),
-        HostBasedHandler(Platform.FACEBOOK, ("facebook.com", "fb.com", "fb.watch")),
-    )
-
-
-def find_handler(handlers: tuple[PlatformHandler, ...], url: str) -> PlatformHandler | None:
-    for handler in handlers:
-        if handler.matches(url):
-            return handler
-    return None
-
-
-def detect_platform(handlers: tuple[PlatformHandler, ...], url: str) -> Platform:
-    handler = find_handler(handlers, url)
-    return handler.platform if handler else Platform.UNKNOWN
