@@ -8,8 +8,8 @@ from .base import TELEGRAM_BOT_UPLOAD_LIMIT_BYTES
 
 logger = logging.getLogger(__name__)
 
+PHOTO_EXTS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
 VIDEO_EXTS = frozenset({".mp4", ".mov", ".webm", ".mkv", ".avi"})
-SKIP_EXTS = frozenset({".json", ".txt"})
 GALLERY_DL_TIMEOUT_SECONDS = 60
 
 
@@ -39,11 +39,15 @@ def download_media(
             )
         media: list[tuple[bytes, bool]] = []
         for path in sorted(Path(tmpdir).rglob("*")):
-            if not path.is_file() or path.suffix.lower() in SKIP_EXTS:
+            if not path.is_file():
+                continue
+            ext = path.suffix.lower()
+            is_video = ext in VIDEO_EXTS
+            if not is_video and ext not in PHOTO_EXTS:
+                logger.debug("gallery-dl skipping non-media file: %s", path.name)
                 continue
             if path.stat().st_size > max_filesize:
                 logger.info("gallery-dl file too large, skipping: %s", path.name)
                 continue
-            is_video = path.suffix.lower() in VIDEO_EXTS
             media.append((path.read_bytes(), is_video))
         return media
