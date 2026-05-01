@@ -5,6 +5,7 @@ from io import BytesIO
 from pathlib import Path
 
 from telegram import Message
+from telegram.constants import ChatAction
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import match_filter_func
 
@@ -13,6 +14,7 @@ from .base import (
     TELEGRAM_BOT_UPLOAD_LIMIT_BYTES,
     Platform,
     host_matches,
+    safe_chat_action,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,18 +35,21 @@ class YtDlpHandler:
     def matches(self, url: str) -> bool:
         return host_matches(url, self.hosts)
 
-    async def process(self, url: str, message: Message) -> None:
+    async def process(self, url: str, message: Message) -> bool:
         try:
             data = await asyncio.to_thread(self._download, url)
         except Exception:
             logger.exception("yt-dlp download failed for %s", url)
-            return
+            return False
         if not data:
-            return
+            return True
         try:
+            await safe_chat_action(message, ChatAction.UPLOAD_VIDEO)
             await message.reply_video(video=BytesIO(data))
         except Exception:
             logger.exception("yt-dlp send failed for %s", url)
+            return False
+        return True
 
     def _download(self, url: str) -> bytes | None:
         with tempfile.TemporaryDirectory() as tmpdir:

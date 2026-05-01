@@ -29,6 +29,12 @@ env/
 .coverage
 htmlcov/
 
+# SQLite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # IDE
 .idea/
 .vscode/

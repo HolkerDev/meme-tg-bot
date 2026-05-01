@@ -16,5 +16,6 @@ class HostBasedHandler:
     def matches(self, url: str) -> bool:
         return host_matches(url, self.hosts)
 
-    async def process(self, url: str, message: Message) -> None:
+    async def process(self, url: str, message: Message) -> bool:
         logger.info("platform=%s url=%s (no handler implementation)", self.platform.value, url)
+        return True

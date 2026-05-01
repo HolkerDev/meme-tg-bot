@@ -6,8 +6,15 @@ from urllib.request import Request, urlopen
 
 import instaloader
 from telegram import InputMediaPhoto, InputMediaVideo, Message
+from telegram.constants import ChatAction
 
-from .base import DOWNLOAD_TIMEOUT_SECONDS, MEDIA_GROUP_LIMIT, Platform, host_matches
+from .base import (
+    DOWNLOAD_TIMEOUT_SECONDS,
+    MEDIA_GROUP_LIMIT,
+    Platform,
+    host_matches,
+    safe_chat_action,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -120,23 +127,23 @@ class InstagramHandler:
     def matches(self, url: str) -> bool:
         return host_matches(url, self.hosts)
 
-    async def process(self, url: str, message: Message) -> None:
+    async def process(self, url: str, message: Message) -> bool:
         shortcode = _extract_instagram_shortcode(url)
         if not shortcode:
             logger.info("instagram link is not a post: %s", url)
-            return
+            return True
         try:
             post = await asyncio.to_thread(
                 instaloader.Post.from_shortcode, self._loader.context, shortcode
             )
         except Exception:
             logger.exception("failed to fetch instagram post %s", shortcode)
-            return
+            return False
 
         media = _collect_post_media(post)
         if not media:
             logger.info("instagram post %s has no media", shortcode)
-            return
+            return True
 
         try:
             if len(media) == 1:
@@ -145,10 +152,14 @@ class InstagramHandler:
                 await self._reply_group(message, media[:MEDIA_GROUP_LIMIT])
         except Exception:
             logger.exception("failed to send instagram media for %s", shortcode)
+            return False
+        return True
 
     async def _reply_single(self, message: Message, item: tuple[str, bool]) -> None:
         url, is_video = item
         data = await asyncio.to_thread(_download_to_memory, url)
+        action = ChatAction.UPLOAD_VIDEO if is_video else ChatAction.UPLOAD_PHOTO
+        await safe_chat_action(message, action)
         if is_video:
             await message.reply_video(video=BytesIO(data))
         else:
@@ -162,4 +173,7 @@ class InstagramHandler:
                 media_group.append(InputMediaVideo(media=BytesIO(data)))
             else:
                 media_group.append(InputMediaPhoto(media=BytesIO(data)))
+        has_video = any(is_video for _, is_video in items)
+        action = ChatAction.UPLOAD_VIDEO if has_video else ChatAction.UPLOAD_PHOTO
+        await safe_chat_action(message, action)
         await message.reply_media_group(media=media_group)
