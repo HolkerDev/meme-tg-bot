@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 class Settings:
     telegram_bot_token: str
     log_level: str
+    instagram_username: str | None
+    instagram_session_file: str | None
 
     @classmethod
     def load(cls) -> "Settings":
@@ -18,4 +20,6 @@ class Settings:
         return cls(
             telegram_bot_token=token,
             log_level=os.environ.get("LOG_LEVEL", "INFO"),
+            instagram_username=os.environ.get("INSTAGRAM_USERNAME") or None,
+            instagram_session_file=os.environ.get("INSTAGRAM_SESSION_FILE") or None,
         )
