@@ -36,10 +36,11 @@ class InstagramHandler:
         username: str | None = None,
         password: str | None = None,
         session_file: str | None = None,
+        cookies_file: str | None = None,
     ) -> None:
         self._username = username
         self._password = password
-        self._session_file = session_file
+        self._cookies_file = cookies_file
         self._max_duration = DEFAULT_MAX_DURATION_SECONDS
         self._max_filesize = TELEGRAM_BOT_UPLOAD_LIMIT_BYTES
 
@@ -77,7 +78,9 @@ class InstagramHandler:
 
     async def _fallback_gallery_dl(self, url: str, message: Message) -> bool:
         logger.info("trying gallery-dl for instagram url=%s", url)
-        items = await asyncio.to_thread(gallery_dl.download_media, url, self._max_filesize)
+        items = await asyncio.to_thread(
+            gallery_dl.download_media, url, self._max_filesize, self._cookies_file
+        )
         if not items:
             logger.info("gallery-dl found no media url=%s", url)
             return True
@@ -98,7 +101,9 @@ class InstagramHandler:
             "noplaylist": True,
             "max_filesize": self._max_filesize,
         }
-        if self._username and self._password:
+        if self._cookies_file:
+            opts["cookiefile"] = self._cookies_file
+        elif self._username and self._password:
             opts["username"] = self._username
             opts["password"] = self._password
         return opts

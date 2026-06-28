@@ -10,12 +10,14 @@ def build_handlers(
     instagram_username: str | None = None,
     instagram_password: str | None = None,
     instagram_session_file: str | None = None,
+    instagram_cookies_file: str | None = None,
 ) -> tuple[PlatformHandler, ...]:
     return (
         InstagramHandler(
             username=instagram_username,
             password=instagram_password,
             session_file=instagram_session_file,
+            cookies_file=instagram_cookies_file,
         ),
         TikTokHandler(),
         YouTubeHandler(),

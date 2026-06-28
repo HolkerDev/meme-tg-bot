@@ -11,6 +11,7 @@ class Settings:
     instagram_username: str | None
     instagram_password: str | None
     instagram_session_file: str | None
+    instagram_cookies_file: str | None
     db_path: str
 
     @classmethod
@@ -25,5 +26,6 @@ class Settings:
             instagram_username=os.environ.get("INSTAGRAM_USERNAME") or None,
             instagram_password=os.environ.get("INSTAGRAM_PASSWORD") or None,
             instagram_session_file=os.environ.get("INSTAGRAM_SESSION_FILE") or None,
+            instagram_cookies_file=os.environ.get("INSTAGRAM_COOKIES_FILE") or None,
             db_path=os.environ.get("DB_PATH", "meme_nova.db"),
         )

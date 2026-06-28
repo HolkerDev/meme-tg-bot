@@ -14,12 +14,18 @@ GALLERY_DL_TIMEOUT_SECONDS = 60
 
 
 def download_media(
-    url: str, max_filesize: int = TELEGRAM_BOT_UPLOAD_LIMIT_BYTES
+    url: str,
+    max_filesize: int = TELEGRAM_BOT_UPLOAD_LIMIT_BYTES,
+    cookies_file: str | None = None,
 ) -> list[tuple[bytes, bool]]:
     with tempfile.TemporaryDirectory() as tmpdir:
+        cmd = [sys.executable, "-m", "gallery_dl", "--quiet", "--dest", tmpdir]
+        if cookies_file:
+            cmd += ["--cookies", cookies_file]
+        cmd.append(url)
         try:
             result = subprocess.run(
-                [sys.executable, "-m", "gallery_dl", "--quiet", "--dest", tmpdir, url],
+                cmd,
                 check=False,
                 capture_output=True,
                 timeout=GALLERY_DL_TIMEOUT_SECONDS,

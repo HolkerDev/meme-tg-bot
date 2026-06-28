@@ -177,6 +177,7 @@ def build_app(settings: Settings) -> Application[Any, Any, Any, Any, Any, Any]:
         instagram_username=settings.instagram_username,
         instagram_password=settings.instagram_password,
         instagram_session_file=settings.instagram_session_file,
+        instagram_cookies_file=settings.instagram_cookies_file,
     )
     queue = RetryQueue(settings.db_path)
     stats = StatsStore(settings.db_path)
