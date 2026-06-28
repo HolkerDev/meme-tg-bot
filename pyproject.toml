@@ -9,7 +9,6 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "gallery-dl>=1.30.6",
-    "instaloader>=4.15.1",
     "python-dotenv>=1.2.2",
     "python-telegram-bot[rate-limiter]>=22.7",
     "yt-dlp>=2026.3.17",
@@ -43,7 +42,7 @@ strict = true
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["instaloader", "instaloader.*", "yt_dlp", "yt_dlp.*"]
+module = ["yt_dlp", "yt_dlp.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

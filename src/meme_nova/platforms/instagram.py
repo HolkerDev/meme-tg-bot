@@ -1,19 +1,20 @@
 import asyncio
 import logging
 import re
-from io import BytesIO
-from urllib.request import Request, urlopen
+import tempfile
+from pathlib import Path
 
-import instaloader
-from telegram import InputMediaPhoto, InputMediaVideo, Message
-from telegram.constants import ChatAction
+from telegram import Message
+from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
 
+from . import gallery_dl
+from ._media import send_media_bytes
 from .base import (
-    DOWNLOAD_TIMEOUT_SECONDS,
-    MEDIA_GROUP_LIMIT,
+    DEFAULT_MAX_DURATION_SECONDS,
+    TELEGRAM_BOT_UPLOAD_LIMIT_BYTES,
     Platform,
     host_matches,
-    safe_chat_action,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,27 +27,6 @@ def _extract_instagram_shortcode(url: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _download_to_memory(url: str) -> bytes:
-    request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(request, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
-        return bytes(response.read())
-
-
-def _collect_post_media(post: instaloader.Post) -> list[tuple[str, bool]]:
-    media: list[tuple[str, bool]] = []
-    if post.typename == "GraphSidecar":
-        for node in post.get_sidecar_nodes():
-            url = node.video_url if node.is_video else node.display_url
-            if url:
-                media.append((url, bool(node.is_video)))
-        return media
-    if post.is_video and post.video_url:
-        return [(post.video_url, True)]
-    if post.url:
-        return [(post.url, False)]
-    return media
-
-
 class InstagramHandler:
     platform = Platform.INSTAGRAM
     hosts = ("instagram.com", "instagr.am")
@@ -57,72 +37,11 @@ class InstagramHandler:
         password: str | None = None,
         session_file: str | None = None,
     ) -> None:
-        self._loader = instaloader.Instaloader(
-            download_pictures=False,
-            download_videos=False,
-            download_video_thumbnails=False,
-            download_geotags=False,
-            download_comments=False,
-            save_metadata=False,
-        )
-        if username:
-            self._authenticate(username, password, session_file)
-
-    def _authenticate(
-        self, username: str, password: str | None, session_file: str | None
-    ) -> None:
-        if self._try_load_session(username, session_file):
-            return
-        if not password:
-            logger.warning(
-                "instagram session file not found for %s and INSTAGRAM_PASSWORD not set; "
-                "set INSTAGRAM_PASSWORD or run `instaloader -l %s`. proceeding unauthenticated.",
-                username,
-                username,
-            )
-            return
-        self._login_and_save(username, password, session_file)
-
-    def _try_load_session(self, username: str, session_file: str | None) -> bool:
-        try:
-            self._loader.load_session_from_file(username, filename=session_file)
-        except FileNotFoundError:
-            return False
-        except Exception:
-            logger.exception("failed to load instagram session for %s", username)
-            return False
-        logger.info("instagram session loaded for %s", username)
-        return True
-
-    def _login_and_save(
-        self, username: str, password: str, session_file: str | None
-    ) -> None:
-        try:
-            self._loader.login(username, password)
-        except instaloader.TwoFactorAuthRequiredException:
-            logger.error(
-                "instagram 2FA required for %s; password login cannot handle 2FA. "
-                "run `instaloader -l %s` once on this machine to seed the session.",
-                username,
-                username,
-            )
-            return
-        except instaloader.BadCredentialsException:
-            logger.error("instagram login rejected: bad credentials for %s", username)
-            return
-        except Exception:
-            logger.exception(
-                "instagram login failed for %s (likely a checkpoint or rate-limit; "
-                "check the account in a browser, then retry)",
-                username,
-            )
-            return
-        try:
-            self._loader.save_session_to_file(filename=session_file)
-        except Exception:
-            logger.exception("instagram login succeeded but saving session failed for %s", username)
-            return
-        logger.info("instagram login successful for %s; session saved", username)
+        self._username = username
+        self._password = password
+        self._session_file = session_file
+        self._max_duration = DEFAULT_MAX_DURATION_SECONDS
+        self._max_filesize = TELEGRAM_BOT_UPLOAD_LIMIT_BYTES
 
     def matches(self, url: str) -> bool:
         return host_matches(url, self.hosts)
@@ -132,48 +51,73 @@ class InstagramHandler:
         if not shortcode:
             logger.info("instagram link is not a post: %s", url)
             return True
+
         try:
-            post = await asyncio.to_thread(
-                instaloader.Post.from_shortcode, self._loader.context, shortcode
-            )
+            items = await asyncio.to_thread(self._download, url)
+        except DownloadError:
+            logger.exception("yt-dlp failed for instagram %s, trying gallery-dl", shortcode)
+            return await self._fallback_gallery_dl(url, message)
         except Exception:
             logger.exception("failed to fetch instagram post %s", shortcode)
             return False
 
-        media = _collect_post_media(post)
-        if not media:
+        if items is None:
+            return await self._fallback_gallery_dl(url, message)
+
+        if not items:
             logger.info("instagram post %s has no media", shortcode)
             return True
 
         try:
-            if len(media) == 1:
-                await self._reply_single(message, media[0])
-            else:
-                await self._reply_group(message, media[:MEDIA_GROUP_LIMIT])
+            await send_media_bytes(message, items)
         except Exception:
             logger.exception("failed to send instagram media for %s", shortcode)
             return False
         return True
 
-    async def _reply_single(self, message: Message, item: tuple[str, bool]) -> None:
-        url, is_video = item
-        data = await asyncio.to_thread(_download_to_memory, url)
-        action = ChatAction.UPLOAD_VIDEO if is_video else ChatAction.UPLOAD_PHOTO
-        await safe_chat_action(message, action)
-        if is_video:
-            await message.reply_video(video=BytesIO(data))
-        else:
-            await message.reply_photo(photo=BytesIO(data))
+    async def _fallback_gallery_dl(self, url: str, message: Message) -> bool:
+        logger.info("trying gallery-dl for instagram url=%s", url)
+        items = await asyncio.to_thread(gallery_dl.download_media, url, self._max_filesize)
+        if not items:
+            logger.info("gallery-dl found no media url=%s", url)
+            return True
+        try:
+            await send_media_bytes(message, items)
+        except Exception:
+            logger.exception("gallery-dl send failed url=%s", url)
+            return False
+        return True
 
-    async def _reply_group(self, message: Message, items: list[tuple[str, bool]]) -> None:
-        media_group: list[InputMediaPhoto | InputMediaVideo] = []
-        for url, is_video in items:
-            data = await asyncio.to_thread(_download_to_memory, url)
-            if is_video:
-                media_group.append(InputMediaVideo(media=BytesIO(data)))
-            else:
-                media_group.append(InputMediaPhoto(media=BytesIO(data)))
-        has_video = any(is_video for _, is_video in items)
-        action = ChatAction.UPLOAD_VIDEO if has_video else ChatAction.UPLOAD_PHOTO
-        await safe_chat_action(message, action)
-        await message.reply_media_group(media=media_group)
+    def _build_ydl_opts(self, tmpdir: str) -> dict[str, object]:
+        opts: dict[str, object] = {
+            "format": "b[height<=720][ext=mp4]/b[ext=mp4]/b",
+            "outtmpl": str(Path(tmpdir) / "%(id)s.%(ext)s"),
+            "quiet": True,
+            "no_warnings": True,
+            "noprogress": True,
+            "noplaylist": True,
+            "max_filesize": self._max_filesize,
+        }
+        if self._username and self._password:
+            opts["username"] = self._username
+            opts["password"] = self._password
+        return opts
+
+    def _download(self, url: str) -> list[tuple[bytes, bool]] | None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            opts = self._build_ydl_opts(tmpdir)
+            with YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+            if info is None:
+                return None
+            files = sorted(Path(tmpdir).iterdir())
+            items: list[tuple[bytes, bool]] = []
+            for f in files:
+                if not f.is_file():
+                    continue
+                if f.stat().st_size > self._max_filesize:
+                    continue
+                ext = f.suffix.lower()
+                is_video = ext in {".mp4", ".mov", ".webm", ".mkv"}
+                items.append((f.read_bytes(), is_video))
+            return items
