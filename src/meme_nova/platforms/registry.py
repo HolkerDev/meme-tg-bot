@@ -1,5 +1,6 @@
-from . import facebook, reddit
+from . import reddit
 from .base import Platform, PlatformHandler
+from .facebook import FacebookHandler
 from .instagram import InstagramHandler
 from .tiktok import TikTokHandler
 from .twitter import TwitterHandler
@@ -23,7 +24,7 @@ def build_handlers(
         YouTubeHandler(),
         TwitterHandler(),
         reddit.handler,
-        facebook.handler,
+        FacebookHandler(),
     )
 
 

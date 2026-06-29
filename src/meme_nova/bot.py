@@ -60,7 +60,7 @@ def make_log_group_message(
     queue: RetryQueue,
     stats: StatsStore,
 ) -> Callable[[Update, ContextTypes.DEFAULT_TYPE], Coroutine[Any, Any, None]]:
-    async def log_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def log_group_message(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         msg = update.effective_message
         chat = update.effective_chat
         user = update.effective_user
@@ -186,17 +186,10 @@ def build_app(settings: Settings) -> Application[Any, Any, Any, Any, Any, Any]:
         app.create_task(retry_worker(queue, handlers, app.bot))
         app.create_task(stats_worker(stats, app.bot))
 
-    app = (
-        ApplicationBuilder()
-        .token(settings.telegram_bot_token)
-        .post_init(post_init)
-        .build()
-    )
+    app = ApplicationBuilder().token(settings.telegram_bot_token).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     group_filter = filters.ChatType.GROUPS & ~filters.COMMAND & ~filters.StatusUpdate.ALL
-    app.add_handler(
-        MessageHandler(group_filter, make_log_group_message(handlers, queue, stats))
-    )
+    app.add_handler(MessageHandler(group_filter, make_log_group_message(handlers, queue, stats)))
     app.add_handler(
         MessageHandler(filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND, echo)
     )

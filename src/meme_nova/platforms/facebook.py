@@ -1,4 +1,7 @@
 from .base import Platform
-from .host_based import HostBasedHandler
+from .ytdlp import YtDlpHandler
 
-handler = HostBasedHandler(Platform.FACEBOOK, ("facebook.com", "fb.com", "fb.watch"))
+
+class FacebookHandler(YtDlpHandler):
+    platform = Platform.FACEBOOK
+    hosts = ("facebook.com", "fb.com", "fb.watch")
