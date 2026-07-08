@@ -1,4 +1,5 @@
 from . import reddit
+from meme_nova.media_dedup import MediaDedupStore
 from .base import Platform, PlatformHandler
 from .facebook import FacebookHandler
 from .instagram import InstagramHandler
@@ -12,6 +13,7 @@ def build_handlers(
     instagram_password: str | None = None,
     instagram_session_file: str | None = None,
     instagram_cookies_file: str | None = None,
+    media_dedup: MediaDedupStore | None = None,
 ) -> tuple[PlatformHandler, ...]:
     return (
         InstagramHandler(
@@ -19,6 +21,7 @@ def build_handlers(
             password=instagram_password,
             session_file=instagram_session_file,
             cookies_file=instagram_cookies_file,
+            media_dedup=media_dedup,
         ),
         TikTokHandler(),
         YouTubeHandler(),

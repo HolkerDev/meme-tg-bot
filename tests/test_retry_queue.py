@@ -11,7 +11,7 @@ def queue(tmp_path: Path) -> RetryQueue:
 
 
 async def test_enqueue_then_due_after_first_offset(queue: RetryQueue) -> None:
-    await queue.enqueue("https://example.com/x", chat_id=1, chat_type="group", message_id=42)
+    assert await queue.enqueue("https://example.com/x", chat_id=1, chat_type="group", message_id=42)
 
     not_yet = await queue.fetch_due(now=0.0)
     assert not_yet == []
@@ -20,6 +20,14 @@ async def test_enqueue_then_due_after_first_offset(queue: RetryQueue) -> None:
     assert len(due) == 1
     assert due[0].url == "https://example.com/x"
     assert due[0].attempt == 0
+
+
+async def test_enqueue_dedupes_same_message_url(queue: RetryQueue) -> None:
+    assert await queue.enqueue("https://example.com/x", chat_id=1, chat_type="group", message_id=42)
+    assert not await queue.enqueue(
+        "https://example.com/x", chat_id=1, chat_type="group", message_id=42
+    )
+    assert len(await queue.fetch_due(now=10**12)) == 1
 
 
 async def test_mark_failed_advances_attempt_and_schedule(queue: RetryQueue) -> None:
@@ -33,6 +41,20 @@ async def test_mark_failed_advances_attempt_and_schedule(queue: RetryQueue) -> N
     assert updated.id == item.id
     # next_attempt_at not exposed on RetryItem, but due fetch confirms scheduled state
     assert expected_next == item.created_at + BACKOFF_SCHEDULE[1]
+
+
+async def test_mark_failed_schedules_from_now(queue: RetryQueue, monkeypatch: pytest.MonkeyPatch) -> None:
+    await queue.enqueue("https://example.com/x", chat_id=1, chat_type="group", message_id=42)
+    [item] = await queue.fetch_due(now=10**12)
+
+    monkeypatch.setattr("meme_nova.retry_queue.time.time", lambda: 1000.0)
+    await queue.mark_failed(item)
+
+    not_yet = await queue.fetch_due(now=999.0)
+    assert not_yet == []
+    due = await queue.fetch_due(now=1031.0)
+    assert len(due) == 1
+    assert due[0].attempt == 1
 
 
 async def test_mark_failed_at_last_attempt_deletes(queue: RetryQueue) -> None:

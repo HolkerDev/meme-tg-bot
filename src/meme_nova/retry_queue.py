@@ -56,10 +56,10 @@ class RetryQueue:
 
     async def enqueue(
         self, url: str, chat_id: int, chat_type: str, message_id: int
-    ) -> None:
+    ) -> bool:
         now = time.time()
         next_at = now + BACKOFF_SCHEDULE[0]
-        await asyncio.to_thread(
+        return await asyncio.to_thread(
             self._enqueue_sync, url, chat_id, chat_type, message_id, now, next_at
         )
 
@@ -71,16 +71,31 @@ class RetryQueue:
         message_id: int,
         created_at: float,
         next_at: float,
-    ) -> None:
+    ) -> bool:
         with self._connect() as conn:
-            conn.execute(
+            cur = conn.execute(
                 """
                 INSERT INTO retry_queue
                     (url, chat_id, chat_type, message_id, attempt, next_attempt_at, created_at)
-                VALUES (?, ?, ?, ?, 0, ?, ?)
+                SELECT ?, ?, ?, ?, 0, ?, ?
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM retry_queue
+                    WHERE url = ? AND chat_id = ? AND message_id = ?
+                )
                 """,
-                (url, chat_id, chat_type, message_id, next_at, created_at),
+                (
+                    url,
+                    chat_id,
+                    chat_type,
+                    message_id,
+                    next_at,
+                    created_at,
+                    url,
+                    chat_id,
+                    message_id,
+                ),
             )
+            return cur.rowcount > 0
 
     async def fetch_due(self, now: float | None = None) -> list[RetryItem]:
         ts = now if now is not None else time.time()
@@ -112,7 +127,7 @@ class RetryQueue:
             await self.delete(item.id)
             logger.info("retry exhausted for url=%s after %d attempts", item.url, next_idx)
             return
-        next_at = item.created_at + BACKOFF_SCHEDULE[next_idx]
+        next_at = time.time() + BACKOFF_SCHEDULE[next_idx]
         await asyncio.to_thread(self._mark_failed_sync, item.id, next_idx, next_at)
 
     def _mark_failed_sync(self, item_id: int, attempt: int, next_at: float) -> None:

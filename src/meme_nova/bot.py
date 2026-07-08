@@ -15,6 +15,7 @@ from telegram.ext import (
     filters,
 )
 
+from meme_nova.media_dedup import MediaDedupStore
 from meme_nova.platforms import Platform, PlatformHandler, build_handlers, find_handler
 from meme_nova.platforms.base import safe_chat_action
 from meme_nova.retry_queue import POLL_INTERVAL_SECONDS, RetryItem, RetryQueue
@@ -59,6 +60,7 @@ def make_log_group_message(
     handlers: tuple[PlatformHandler, ...],
     queue: RetryQueue,
     stats: StatsStore,
+    dedup: MediaDedupStore,
 ) -> Callable[[Update, ContextTypes.DEFAULT_TYPE], Coroutine[Any, Any, None]]:
     async def log_group_message(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         msg = update.effective_message
@@ -83,11 +85,16 @@ def make_log_group_message(
             if not handler:
                 continue
             had_valid_link = True
-            await safe_chat_action(msg, ChatAction.TYPING)
-            ok = await handler.process(url, msg)
+            lock = await dedup.lock(chat.id, msg.message_id, url)
+            async with lock:
+                if await dedup.is_posted(chat.id, msg.message_id, url):
+                    logger.info("skipping already-posted url=%s", url)
+                    continue
+                await safe_chat_action(msg, ChatAction.TYPING)
+                ok = await handler.process(url, msg)
             if not ok:
-                await queue.enqueue(url, chat.id, chat.type, msg.message_id)
-                logger.info("queued retry url=%s platform=%s", url, platform.value)
+                if await queue.enqueue(url, chat.id, chat.type, msg.message_id):
+                    logger.info("queued retry url=%s platform=%s", url, platform.value)
         if had_valid_link and user:
             await stats.record_post(chat.id, user.id, _display_name(update))
 
@@ -109,19 +116,30 @@ async def _retry_one(
     handlers: tuple[PlatformHandler, ...],
     queue: RetryQueue,
     bot: Bot,
+    dedup: MediaDedupStore,
 ) -> None:
+    if await dedup.is_posted(item.chat_id, item.message_id, item.url):
+        logger.info("retry skip already-posted url=%s", item.url)
+        await queue.delete(item.id)
+        return
     handler = find_handler(handlers, item.url)
     if not handler:
         await queue.delete(item.id)
         return
     msg = _rebuild_message(item, bot)
     logger.info("retry attempt=%d url=%s", item.attempt + 1, item.url)
-    await safe_chat_action(msg, ChatAction.TYPING)
-    try:
-        ok = await handler.process(item.url, msg)
-    except Exception:
-        logger.exception("retry crashed url=%s", item.url)
-        ok = False
+    lock = await dedup.lock(item.chat_id, item.message_id, item.url)
+    async with lock:
+        if await dedup.is_posted(item.chat_id, item.message_id, item.url):
+            logger.info("retry skip already-posted url=%s", item.url)
+            await queue.delete(item.id)
+            return
+        await safe_chat_action(msg, ChatAction.TYPING)
+        try:
+            ok = await handler.process(item.url, msg)
+        except Exception:
+            logger.exception("retry crashed url=%s", item.url)
+            ok = False
     if ok:
         await queue.delete(item.id)
     else:
@@ -132,12 +150,13 @@ async def retry_worker(
     queue: RetryQueue,
     handlers: tuple[PlatformHandler, ...],
     bot: Bot,
+    dedup: MediaDedupStore,
 ) -> None:
     while True:
         try:
             due = await queue.fetch_due()
             for item in due:
-                await _retry_one(item, handlers, queue, bot)
+                await _retry_one(item, handlers, queue, bot, dedup)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -173,23 +192,25 @@ async def stats_worker(stats: StatsStore, bot: Bot) -> None:
 
 
 def build_app(settings: Settings) -> Application[Any, Any, Any, Any, Any, Any]:
+    queue = RetryQueue(settings.db_path)
+    stats = StatsStore(settings.db_path)
+    dedup = MediaDedupStore(settings.db_path)
     handlers = build_handlers(
         instagram_username=settings.instagram_username,
         instagram_password=settings.instagram_password,
         instagram_session_file=settings.instagram_session_file,
         instagram_cookies_file=settings.instagram_cookies_file,
+        media_dedup=dedup,
     )
-    queue = RetryQueue(settings.db_path)
-    stats = StatsStore(settings.db_path)
 
     async def post_init(app: Application[Any, Any, Any, Any, Any, Any]) -> None:
-        app.create_task(retry_worker(queue, handlers, app.bot))
+        app.create_task(retry_worker(queue, handlers, app.bot, dedup))
         app.create_task(stats_worker(stats, app.bot))
 
     app = ApplicationBuilder().token(settings.telegram_bot_token).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     group_filter = filters.ChatType.GROUPS & ~filters.COMMAND & ~filters.StatusUpdate.ALL
-    app.add_handler(MessageHandler(group_filter, make_log_group_message(handlers, queue, stats)))
+    app.add_handler(MessageHandler(group_filter, make_log_group_message(handlers, queue, stats, dedup)))
     app.add_handler(
         MessageHandler(filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND, echo)
     )
