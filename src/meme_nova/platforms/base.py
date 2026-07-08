@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 from urllib.parse import urlparse
@@ -23,14 +24,32 @@ class Platform(StrEnum):
     UNKNOWN = "unknown"
 
 
+@dataclass(frozen=True)
+class ProcessResult:
+    ok: bool
+    bot_message_ids: tuple[int, ...] = ()
+
+    @classmethod
+    def success(cls, *message_ids: int) -> "ProcessResult":
+        return cls(ok=True, bot_message_ids=message_ids)
+
+    @classmethod
+    def skipped(cls) -> "ProcessResult":
+        return cls(ok=True)
+
+    @classmethod
+    def failure(cls) -> "ProcessResult":
+        return cls(ok=False)
+
+
 class PlatformHandler(Protocol):
     @property
     def platform(self) -> Platform: ...
 
     def matches(self, url: str) -> bool: ...
 
-    async def process(self, url: str, message: Message) -> bool:
-        """True = handled or skipped; False = transient failure (retry)."""
+    async def process(self, url: str, message: Message) -> ProcessResult:
+        """ok=True handled/skipped; ok=False transient failure (retry)."""
         ...
 
 

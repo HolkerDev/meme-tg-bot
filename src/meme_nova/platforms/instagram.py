@@ -13,6 +13,7 @@ from . import gallery_dl
 from ._media import send_media_bytes
 from .base import (
     DEFAULT_MAX_DURATION_SECONDS,
+    ProcessResult,
     TELEGRAM_BOT_UPLOAD_LIMIT_BYTES,
     Platform,
     host_matches,
@@ -50,17 +51,17 @@ class InstagramHandler:
     def matches(self, url: str) -> bool:
         return host_matches(url, self.hosts)
 
-    async def process(self, url: str, message: Message) -> bool:
+    async def process(self, url: str, message: Message) -> ProcessResult:
         shortcode = _extract_instagram_shortcode(url)
         if not shortcode:
             logger.info("instagram link is not a post: %s", url)
-            return True
+            return ProcessResult.skipped()
 
         if self._dedup and await self._dedup.is_posted(
             message.chat_id, message.message_id, url
         ):
             logger.info("instagram already posted url=%s", url)
-            return True
+            return ProcessResult.skipped()
 
         try:
             items = await asyncio.to_thread(self._download, url)
@@ -69,43 +70,42 @@ class InstagramHandler:
             return await self._fallback_gallery_dl(url, message)
         except Exception:
             logger.exception("failed to fetch instagram post %s", shortcode)
-            return False
+            return ProcessResult.failure()
 
         if items is None:
             return await self._fallback_gallery_dl(url, message)
 
         if not items:
             logger.info("instagram post %s has no media", shortcode)
-            return True
+            return ProcessResult.skipped()
 
         try:
-            await self._send_and_mark(url, message, items)
+            return await self._send_and_mark(url, message, items)
         except Exception:
             logger.exception("failed to send instagram media for %s", shortcode)
-            return False
-        return True
+            return ProcessResult.failure()
 
     async def _send_and_mark(
         self, url: str, message: Message, items: list[tuple[bytes, bool]]
-    ) -> None:
-        await send_media_bytes(message, items)
+    ) -> ProcessResult:
+        bot_message_ids = await send_media_bytes(message, items)
         if self._dedup:
             await self._dedup.mark_posted(message.chat_id, message.message_id, url)
+        return ProcessResult.success(*bot_message_ids)
 
-    async def _fallback_gallery_dl(self, url: str, message: Message) -> bool:
+    async def _fallback_gallery_dl(self, url: str, message: Message) -> ProcessResult:
         logger.info("trying gallery-dl for instagram url=%s", url)
         items = await asyncio.to_thread(
             gallery_dl.download_media, url, self._max_filesize, self._cookies_file
         )
         if not items:
             logger.info("gallery-dl found no media url=%s", url)
-            return True
+            return ProcessResult.skipped()
         try:
-            await self._send_and_mark(url, message, items)
+            return await self._send_and_mark(url, message, items)
         except Exception:
             logger.exception("gallery-dl send failed url=%s", url)
-            return False
-        return True
+            return ProcessResult.failure()
 
     def _build_ydl_opts(self, tmpdir: str) -> dict[str, object]:
         opts: dict[str, object] = {

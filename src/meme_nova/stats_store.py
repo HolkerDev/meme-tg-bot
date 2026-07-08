@@ -87,6 +87,33 @@ class StatsStore:
         return [TopUser(user_id=r["user_id"], display_name=r["display_name"], count=r["cnt"])
                 for r in rows]
 
+    async def user_link_counts(self, chat_id: int, since: float) -> list[TopUser]:
+        rows = await asyncio.to_thread(self._user_link_counts_sync, chat_id, since)
+        return [TopUser(user_id=r["user_id"], display_name=r["display_name"], count=r["cnt"])
+                for r in rows]
+
+    def _user_link_counts_sync(self, chat_id: int, since: float) -> list[sqlite3.Row]:
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                SELECT user_id, display_name, cnt FROM (
+                    SELECT
+                        user_id,
+                        display_name,
+                        COUNT(*) OVER (PARTITION BY user_id) AS cnt,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY user_id ORDER BY posted_at DESC
+                        ) AS rn
+                    FROM link_posts
+                    WHERE chat_id = ? AND posted_at >= ?
+                )
+                WHERE rn = 1
+                ORDER BY cnt DESC, user_id
+                """,
+                (chat_id, since),
+            )
+            return list(cur.fetchall())
+
     def _top_users_sync(
         self, chat_id: int, since: float, limit: int
     ) -> list[sqlite3.Row]:

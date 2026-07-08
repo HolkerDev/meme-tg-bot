@@ -11,6 +11,7 @@ from . import gallery_dl
 from ._media import send_media_bytes
 from .base import (
     DEFAULT_MAX_DURATION_SECONDS,
+    ProcessResult,
     TELEGRAM_BOT_UPLOAD_LIMIT_BYTES,
     Platform,
     host_matches,
@@ -34,38 +35,38 @@ class YtDlpHandler:
     def matches(self, url: str) -> bool:
         return host_matches(url, self.hosts)
 
-    async def process(self, url: str, message: Message) -> bool:
+    async def process(self, url: str, message: Message) -> ProcessResult:
         try:
             data = await asyncio.to_thread(self._download, url)
         except DownloadError as e:
             if isinstance(e.__context__, UnsupportedError):
                 return await self._fallback_gallery_dl(url, message)
             logger.exception("yt-dlp download failed for %s", url)
-            return False
+            return ProcessResult.failure()
         except Exception:
             logger.exception("yt-dlp download failed for %s", url)
-            return False
+            return ProcessResult.failure()
         if not data:
-            return True
+            return ProcessResult.skipped()
         try:
-            await send_media_bytes(message, [(data, True)])
+            bot_message_ids = await send_media_bytes(message, [(data, True)])
         except Exception:
             logger.exception("yt-dlp send failed for %s", url)
-            return False
-        return True
+            return ProcessResult.failure()
+        return ProcessResult.success(*bot_message_ids)
 
-    async def _fallback_gallery_dl(self, url: str, message: Message) -> bool:
+    async def _fallback_gallery_dl(self, url: str, message: Message) -> ProcessResult:
         logger.info("yt-dlp unsupported, trying gallery-dl url=%s", url)
         items = await asyncio.to_thread(gallery_dl.download_media, url, self._max_filesize)
         if not items:
             logger.info("gallery-dl found no media url=%s", url)
-            return True
+            return ProcessResult.skipped()
         try:
-            await send_media_bytes(message, items)
+            bot_message_ids = await send_media_bytes(message, items)
         except Exception:
             logger.exception("gallery-dl send failed url=%s", url)
-            return False
-        return True
+            return ProcessResult.failure()
+        return ProcessResult.success(*bot_message_ids)
 
     def _download(self, url: str) -> bytes | None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from telegram import Message
 
-from .base import Platform, host_matches
+from .base import Platform, ProcessResult, host_matches
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,6 @@ class HostBasedHandler:
     def matches(self, url: str) -> bool:
         return host_matches(url, self.hosts)
 
-    async def process(self, url: str, message: Message) -> bool:
+    async def process(self, url: str, message: Message) -> ProcessResult:
         logger.info("platform=%s url=%s (no handler implementation)", self.platform.value, url)
-        return True
+        return ProcessResult.skipped()
