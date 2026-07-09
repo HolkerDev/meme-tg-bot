@@ -152,6 +152,58 @@ def test_reaction_keys_supports_custom_emoji() -> None:
     assert keys == {"custom:12345"}
 
 
+async def test_reaction_on_link_and_bot_video_counts_once_for_author(
+    store: ReactionStore,
+) -> None:
+    link_message_id = 10
+    bot_video_message_id = 99
+    await store.register_message(
+        100, link_message_id, author_user_id=1, author_display_name="@alice", now=1000.0
+    )
+    await store.register_message(
+        100,
+        bot_video_message_id,
+        author_user_id=1,
+        author_display_name="@alice",
+        source_message_id=link_message_id,
+        now=1001.0,
+    )
+    await store.apply_reaction_delta(
+        chat_id=100,
+        message_id=link_message_id,
+        reactor_user_id=2,
+        old_reactions=[],
+        new_reactions=[ReactionTypeEmoji("🔥")],
+        now=1002.0,
+    )
+    await store.apply_reaction_delta(
+        chat_id=100,
+        message_id=bot_video_message_id,
+        reactor_user_id=2,
+        old_reactions=[],
+        new_reactions=[ReactionTypeEmoji("🔥")],
+        now=1003.0,
+    )
+    counts = await store.recipient_counts(100, since=0.0)
+    assert counts == {1: 1}
+
+
+async def test_reaction_on_link_without_bot_video_counts_once(store: ReactionStore) -> None:
+    await store.register_message(
+        100, 10, author_user_id=1, author_display_name="@alice", now=1000.0
+    )
+    await store.apply_reaction_delta(
+        chat_id=100,
+        message_id=10,
+        reactor_user_id=2,
+        old_reactions=[],
+        new_reactions=[ReactionTypeEmoji("🔥")],
+        now=1001.0,
+    )
+    counts = await store.recipient_counts(100, since=0.0)
+    assert counts == {1: 1}
+
+
 async def test_recipient_counts_respects_window(store: ReactionStore) -> None:
     await _register_author(store, 10)
     await store.apply_reaction_delta(

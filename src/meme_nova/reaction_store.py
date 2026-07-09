@@ -63,31 +63,106 @@ class ReactionStore:
                     message_id INTEGER NOT NULL,
                     author_user_id INTEGER NOT NULL,
                     author_display_name TEXT NOT NULL,
+                    source_message_id INTEGER NOT NULL,
                     registered_at REAL NOT NULL,
                     PRIMARY KEY (chat_id, message_id)
                 )
+                """
+            )
+            self._ensure_column(
+                conn,
+                "tracked_messages",
+                "source_message_id",
+                "INTEGER NOT NULL DEFAULT 0",
+            )
+            conn.execute(
+                """
+                UPDATE tracked_messages
+                SET source_message_id = message_id
+                WHERE source_message_id = 0
                 """
             )
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS reactions_received (
                     chat_id INTEGER NOT NULL,
-                    target_message_id INTEGER NOT NULL,
+                    source_message_id INTEGER NOT NULL,
                     author_user_id INTEGER NOT NULL,
                     author_display_name TEXT NOT NULL,
                     reactor_user_id INTEGER NOT NULL,
                     emoji TEXT NOT NULL,
                     reacted_at REAL NOT NULL,
                     PRIMARY KEY (
-                        chat_id, target_message_id, reactor_user_id, emoji
+                        chat_id, source_message_id, reactor_user_id, emoji
                     )
                 )
                 """
             )
+            self._ensure_column(
+                conn,
+                "reactions_received",
+                "source_message_id",
+                "INTEGER NOT NULL DEFAULT 0",
+            )
+            self._migrate_reactions_primary_key(conn)
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_reactions_chat_time "
                 "ON reactions_received (chat_id, reacted_at)"
             )
+
+    def _ensure_column(
+        self, conn: sqlite3.Connection, table: str, column: str, definition: str
+    ) -> None:
+        columns = {
+            row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+    def _migrate_reactions_primary_key(self, conn: sqlite3.Connection) -> None:
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'reactions_received'"
+        ).fetchone()
+        if row is None or "source_message_id" in row["sql"]:
+            return
+        conn.execute(
+            """
+            CREATE TABLE reactions_received_new (
+                chat_id INTEGER NOT NULL,
+                source_message_id INTEGER NOT NULL,
+                author_user_id INTEGER NOT NULL,
+                author_display_name TEXT NOT NULL,
+                reactor_user_id INTEGER NOT NULL,
+                emoji TEXT NOT NULL,
+                reacted_at REAL NOT NULL,
+                PRIMARY KEY (chat_id, source_message_id, reactor_user_id, emoji)
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO reactions_received_new (
+                chat_id,
+                source_message_id,
+                author_user_id,
+                author_display_name,
+                reactor_user_id,
+                emoji,
+                reacted_at
+            )
+            SELECT
+                chat_id,
+                target_message_id,
+                author_user_id,
+                author_display_name,
+                reactor_user_id,
+                emoji,
+                reacted_at
+            FROM reactions_received
+            """
+        )
+        conn.execute("DROP TABLE reactions_received")
+        conn.execute("ALTER TABLE reactions_received_new RENAME TO reactions_received")
 
     async def register_message(
         self,
@@ -96,14 +171,17 @@ class ReactionStore:
         author_user_id: int,
         author_display_name: str,
         now: float | None = None,
+        source_message_id: int | None = None,
     ) -> None:
         ts = now if now is not None else time.time()
+        source_id = source_message_id if source_message_id is not None else message_id
         await asyncio.to_thread(
             self._register_message_sync,
             chat_id,
             message_id,
             author_user_id,
             author_display_name,
+            source_id,
             ts,
         )
 
@@ -113,19 +191,33 @@ class ReactionStore:
         message_id: int,
         author_user_id: int,
         author_display_name: str,
+        source_message_id: int,
         ts: float,
     ) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO tracked_messages (
-                    chat_id, message_id, author_user_id, author_display_name, registered_at
-                ) VALUES (?, ?, ?, ?, ?)
+                    chat_id,
+                    message_id,
+                    author_user_id,
+                    author_display_name,
+                    source_message_id,
+                    registered_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT (chat_id, message_id) DO UPDATE SET
                     author_user_id = excluded.author_user_id,
-                    author_display_name = excluded.author_display_name
+                    author_display_name = excluded.author_display_name,
+                    source_message_id = excluded.source_message_id
                 """,
-                (chat_id, message_id, author_user_id, author_display_name, ts),
+                (
+                    chat_id,
+                    message_id,
+                    author_user_id,
+                    author_display_name,
+                    source_message_id,
+                    ts,
+                ),
             )
 
     async def lookup_author(self, chat_id: int, message_id: int) -> MessageAuthor | None:
@@ -185,29 +277,30 @@ class ReactionStore:
     ) -> None:
         with self._connect() as conn:
             author = conn.execute(
-                "SELECT author_user_id, author_display_name FROM tracked_messages "
-                "WHERE chat_id = ? AND message_id = ?",
+                "SELECT author_user_id, author_display_name, source_message_id "
+                "FROM tracked_messages WHERE chat_id = ? AND message_id = ?",
                 (chat_id, message_id),
             ).fetchone()
             if author is None:
                 return
             author_user_id = author["author_user_id"]
             author_display_name = author["author_display_name"]
+            source_message_id = author["source_message_id"]
             for emoji in removed:
                 conn.execute(
                     """
                     DELETE FROM reactions_received
-                    WHERE chat_id = ? AND target_message_id = ?
+                    WHERE chat_id = ? AND source_message_id = ?
                       AND reactor_user_id = ? AND emoji = ?
                     """,
-                    (chat_id, message_id, reactor_user_id, emoji),
+                    (chat_id, source_message_id, reactor_user_id, emoji),
                 )
             for emoji in added:
                 conn.execute(
                     """
                     INSERT OR IGNORE INTO reactions_received (
                         chat_id,
-                        target_message_id,
+                        source_message_id,
                         author_user_id,
                         author_display_name,
                         reactor_user_id,
@@ -217,7 +310,7 @@ class ReactionStore:
                     """,
                     (
                         chat_id,
-                        message_id,
+                        source_message_id,
                         author_user_id,
                         author_display_name,
                         reactor_user_id,

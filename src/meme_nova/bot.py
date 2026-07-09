@@ -109,7 +109,11 @@ def make_log_group_message(
             elif result.bot_message_ids and user:
                 for bot_message_id in result.bot_message_ids:
                     await reactions.register_message(
-                        chat.id, bot_message_id, user.id, display_name
+                        chat.id,
+                        bot_message_id,
+                        user.id,
+                        display_name,
+                        source_message_id=msg.message_id,
                     )
         if had_valid_link and user:
             await stats.record_post(chat.id, user.id, display_name)
@@ -130,7 +134,11 @@ async def _register_bot_messages(
         return
     for bot_message_id in bot_message_ids:
         await reactions.register_message(
-            chat_id, bot_message_id, author.user_id, author.display_name
+            chat_id,
+            bot_message_id,
+            author.user_id,
+            author.display_name,
+            source_message_id=source_message_id,
         )
 
 
