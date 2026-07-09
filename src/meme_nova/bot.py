@@ -101,6 +101,8 @@ def make_log_group_message(
                     continue
                 await safe_chat_action(msg, ChatAction.TYPING)
                 result = await handler.process(url, msg)
+                if result.ok:
+                    await dedup.mark_posted(chat.id, msg.message_id, url)
             if not result.ok:
                 if await queue.enqueue(url, chat.id, chat.type, msg.message_id):
                     logger.info("queued retry url=%s platform=%s", url, platform.value)
@@ -172,6 +174,8 @@ async def _retry_one(
         except Exception:
             logger.exception("retry crashed url=%s", item.url)
             result = ProcessResult.failure()
+        if result.ok:
+            await dedup.mark_posted(item.chat_id, item.message_id, item.url)
     if result.ok:
         await _register_bot_messages(
             reactions, item.chat_id, item.message_id, result.bot_message_ids
