@@ -30,6 +30,8 @@ HANDLERS = build_handlers()
         ("https://redd.it/abc", Platform.REDDIT),
         ("https://www.facebook.com/p/abc", Platform.FACEBOOK),
         ("https://fb.watch/abc", Platform.FACEBOOK),
+        ("https://www.pinterest.com/pin/12345/", Platform.PINTEREST),
+        ("https://pin.it/abc", Platform.PINTEREST),
         ("https://example.com/foo", Platform.UNKNOWN),
         ("not-a-url", Platform.UNKNOWN),
         ("", Platform.UNKNOWN),

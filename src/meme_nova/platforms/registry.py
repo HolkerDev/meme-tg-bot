@@ -2,6 +2,7 @@ from . import reddit
 from meme_nova.media_dedup import MediaDedupStore
 from .base import Platform, PlatformHandler
 from .facebook import FacebookHandler
+from .pinterest import PinterestHandler
 from .instagram import InstagramHandler
 from .tiktok import TikTokHandler
 from .twitter import TwitterHandler
@@ -28,6 +29,7 @@ def build_handlers(
         TwitterHandler(),
         reddit.handler,
         FacebookHandler(),
+        PinterestHandler(),
     )
 
 

@@ -21,6 +21,7 @@ class Platform(StrEnum):
     TWITTER = "twitter"
     REDDIT = "reddit"
     FACEBOOK = "facebook"
+    PINTEREST = "pinterest"
     UNKNOWN = "unknown"
 
 
