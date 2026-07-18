@@ -30,12 +30,12 @@ logger = logging.getLogger(__name__)
 STATS_POLL_INTERVAL_SECONDS = 3600.0
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message:
         await update.message.reply_text("meme-nova online. Send text, get echo.")
 
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def echo(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message and update.message.text:
         await update.message.reply_text(update.message.text)
 
@@ -251,9 +251,7 @@ def rank_weekly_users(
     return rows[:limit]
 
 
-async def _publish_due_stats(
-    stats: StatsStore, reactions: ReactionStore, bot: Bot
-) -> None:
+async def _publish_due_stats(stats: StatsStore, reactions: ReactionStore, bot: Bot) -> None:
     for chat in await stats.due_chats():
         since = chat.last_published_at
         link_users = await stats.user_link_counts(chat.chat_id, since)
@@ -340,6 +338,11 @@ def main() -> None:
         level=settings.log_level,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
+
+    logging.getLogger("telegram").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
     app = build_app(settings)
     logger.info("Starting bot polling")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

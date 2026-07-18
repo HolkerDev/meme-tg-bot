@@ -113,9 +113,7 @@ class ReactionStore:
     def _ensure_column(
         self, conn: sqlite3.Connection, table: str, column: str, definition: str
     ) -> None:
-        columns = {
-            row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
-        }
+        columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
         if column not in columns:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
@@ -229,9 +227,7 @@ class ReactionStore:
             display_name=row["author_display_name"],
         )
 
-    def _lookup_author_sync(
-        self, chat_id: int, message_id: int
-    ) -> sqlite3.Row | None:
+    def _lookup_author_sync(self, chat_id: int, message_id: int) -> sqlite3.Row | None:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT author_user_id, author_display_name FROM tracked_messages "
@@ -349,9 +345,7 @@ class ReactionStore:
             for r in rows
         ]
 
-    def _top_recipients_sync(
-        self, chat_id: int, since: float, limit: int
-    ) -> list[sqlite3.Row]:
+    def _top_recipients_sync(self, chat_id: int, since: float, limit: int) -> list[sqlite3.Row]:
         with self._connect() as conn:
             cur = conn.execute(
                 """
