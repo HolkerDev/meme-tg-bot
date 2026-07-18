@@ -8,14 +8,13 @@ from telegram import Message
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
-from meme_nova.media_dedup import MediaDedupStore
 from . import gallery_dl
 from ._media import send_media_bytes
 from .base import (
     DEFAULT_MAX_DURATION_SECONDS,
-    ProcessResult,
     TELEGRAM_BOT_UPLOAD_LIMIT_BYTES,
     Platform,
+    ProcessResult,
     host_matches,
 )
 
@@ -39,12 +38,10 @@ class InstagramHandler:
         password: str | None = None,
         session_file: str | None = None,
         cookies_file: str | None = None,
-        media_dedup: MediaDedupStore | None = None,
     ) -> None:
         self._username = username
         self._password = password
         self._cookies_file = cookies_file
-        self._dedup = media_dedup
         self._max_duration = DEFAULT_MAX_DURATION_SECONDS
         self._max_filesize = TELEGRAM_BOT_UPLOAD_LIMIT_BYTES
 
@@ -55,12 +52,6 @@ class InstagramHandler:
         shortcode = _extract_instagram_shortcode(url)
         if not shortcode:
             logger.info("instagram link is not a post: %s", url)
-            return ProcessResult.skipped()
-
-        if self._dedup and await self._dedup.is_posted(
-            message.chat_id, message.message_id, url
-        ):
-            logger.info("instagram already posted url=%s", url)
             return ProcessResult.skipped()
 
         try:
@@ -80,17 +71,15 @@ class InstagramHandler:
             return ProcessResult.skipped()
 
         try:
-            return await self._send_and_mark(url, message, items)
+            return await self._send(url, message, items)
         except Exception:
             logger.exception("failed to send instagram media for %s", shortcode)
             return ProcessResult.failure()
 
-    async def _send_and_mark(
+    async def _send(
         self, url: str, message: Message, items: list[tuple[bytes, bool]]
     ) -> ProcessResult:
         bot_message_ids = await send_media_bytes(message, items)
-        if self._dedup:
-            await self._dedup.mark_posted(message.chat_id, message.message_id, url)
         return ProcessResult.success(*bot_message_ids)
 
     async def _fallback_gallery_dl(self, url: str, message: Message) -> ProcessResult:
@@ -102,7 +91,7 @@ class InstagramHandler:
             logger.info("gallery-dl found no media url=%s", url)
             return ProcessResult.skipped()
         try:
-            return await self._send_and_mark(url, message, items)
+            return await self._send(url, message, items)
         except Exception:
             logger.exception("gallery-dl send failed url=%s", url)
             return ProcessResult.failure()

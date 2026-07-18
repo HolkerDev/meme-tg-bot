@@ -1,10 +1,16 @@
-.PHONY: run lint format typecheck test check cookies install-cookies-cron
+.PHONY: run lint format typecheck test check cookies install-cookies-cron migrate admin
 
 run:
 	uv run meme-nova
 
 lint:
 	uv run ruff check src tests
+
+migrate:
+	uv run alembic upgrade head
+
+admin:
+	cd admin && bin/rails server
 
 format:
 	uv run ruff format src tests
