@@ -1,8 +1,6 @@
 from datetime import UTC, datetime
 from typing import Any, cast
 
-import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine
 from telegram import (
     Chat,
     MessageReactionCountUpdated,
@@ -171,3 +169,26 @@ async def test_reaction_handler_ignores_untracked_messages(message_repo: Message
     await handler.handle(update, cast(Any, None))
 
     assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == {}
+
+
+async def test_distinct_chat_ids(message_repo: MessageRepo) -> None:
+    await message_repo.register_message(
+        CHAT_ID,
+        10,
+        user_id=1,
+        posted_at=datetime(2026, 7, 12, tzinfo=UTC),
+    )
+    await message_repo.register_message(
+        200,
+        10,
+        user_id=1,
+        posted_at=datetime(2026, 7, 12, tzinfo=UTC),
+    )
+    await message_repo.register_message(
+        CHAT_ID,
+        20,
+        user_id=2,
+        posted_at=datetime(2026, 7, 12, tzinfo=UTC),
+    )
+
+    assert sorted(await message_repo.distinct_chat_ids()) == [CHAT_ID, 200]

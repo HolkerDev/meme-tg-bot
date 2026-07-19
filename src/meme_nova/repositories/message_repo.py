@@ -39,6 +39,12 @@ class MessageRepo:
             rows = (await session.exec(statement)).all()
             return {user_id: int(total) for user_id, total in rows}
 
+    async def distinct_chat_ids(self) -> list[int]:
+        async with AsyncSession(self._engine) as session:
+            statement = select(MessageModel.chat_id).distinct()
+            rows = (await session.exec(statement)).all()
+            return list(rows)
+
     async def update_reaction_count(self, chat_id: int, message_id: int, count: int) -> bool:
         async with AsyncSession(self._engine) as session:
             message = await session.get(MessageModel, (chat_id, message_id))

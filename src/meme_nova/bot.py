@@ -6,6 +6,7 @@ from telegram.ext import ApplicationBuilder
 from meme_nova.db import create_db_engine
 from meme_nova.handlers.registry import build_update_handlers, register_update_handlers
 from meme_nova.repositories.message_repo import MessageRepo
+from meme_nova.scheduler import start_scheduler
 from meme_nova.settings import Settings
 from meme_nova.types import BotApplication
 
@@ -16,7 +17,15 @@ def build_app(settings: Settings) -> BotApplication:
     engine = create_db_engine(settings.db_path)
     message_repo = MessageRepo(engine=engine)
 
-    app = ApplicationBuilder().token(settings.telegram_bot_token).build()
+    async def post_init(_application: BotApplication) -> None:
+        start_scheduler(app, message_repo)
+
+    app = (
+        ApplicationBuilder()
+        .token(settings.telegram_bot_token)
+        .post_init(post_init)
+        .build()
+    )
     update_handlers = build_update_handlers(
         message_repo=message_repo,
         settings=settings,
