@@ -1,16 +1,22 @@
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlmodel.ext.asyncio.session import AsyncSession
 from telegram import (
     Chat,
     MessageReactionCountUpdated,
+    MessageReactionUpdated,
     ReactionCount,
+    ReactionType,
     ReactionTypeEmoji,
     Update,
+    User,
 )
 from telegram.constants import ChatType
 
 from meme_nova.handlers.reaction_handler import ReactionHandler
+from meme_nova.models import MessageModel
 from meme_nova.repositories.message_repo import MessageRepo
 
 CHAT_ID = 100
@@ -32,6 +38,25 @@ def _make_reaction_count_update(
     return Update(update_id=1, message_reaction_count=event)
 
 
+def _make_reaction_update(
+    chat_id: int,
+    message_id: int,
+    *,
+    old: tuple[ReactionType, ...] = (),
+    new: tuple[ReactionType, ...] = (),
+    user_id: int = 7,
+) -> Update:
+    event = MessageReactionUpdated(
+        chat=Chat(id=chat_id, type=ChatType.GROUP),
+        message_id=message_id,
+        date=datetime.now(tz=UTC),
+        user=User(id=user_id, is_bot=False, first_name="Reactor"),
+        old_reaction=old,
+        new_reaction=new,
+    )
+    return Update(update_id=1, message_reaction=event)
+
+
 async def test_register_message_and_update_reaction_count(message_repo: MessageRepo) -> None:
     await message_repo.register_message(
         CHAT_ID,
@@ -45,6 +70,23 @@ async def test_register_message_and_update_reaction_count(message_repo: MessageR
 
     updated = await message_repo.update_reaction_count(CHAT_ID, 99, 1)
     assert updated is False
+
+
+async def test_register_message_upserts_without_resetting_counts(
+    message_repo: MessageRepo,
+    engine: AsyncEngine,
+) -> None:
+    posted_at = datetime(2026, 7, 12, tzinfo=UTC)
+    await message_repo.register_message(CHAT_ID, 10, user_id=1, posted_at=posted_at)
+    await message_repo.update_reaction_count(CHAT_ID, 10, 5)
+
+    await message_repo.register_message(CHAT_ID, 10, user_id=2, posted_at=posted_at)
+
+    async with AsyncSession(engine) as session:
+        message = await session.get(MessageModel, (CHAT_ID, 10))
+        assert message is not None
+        assert message.user_id == 2
+        assert message.reaction_count == 5
 
 
 async def test_weekly_reaction_counts_per_user_in_channel(message_repo: MessageRepo) -> None:
@@ -168,6 +210,67 @@ async def test_reaction_handler_ignores_untracked_messages(message_repo: Message
 
     await handler.handle(update, cast(Any, None))
 
+    assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == {}
+
+
+async def test_apply_reaction_delta_clamps_at_zero(message_repo: MessageRepo) -> None:
+    await message_repo.register_message(
+        CHAT_ID,
+        10,
+        user_id=1,
+        posted_at=datetime(2026, 7, 12, tzinfo=UTC),
+    )
+    await message_repo.update_reaction_count(CHAT_ID, 10, 1)
+
+    assert await message_repo.apply_reaction_delta(CHAT_ID, 10, -5) is True
+    assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == {1: 0}
+    assert await message_repo.apply_reaction_delta(CHAT_ID, 99, 1) is False
+
+
+async def test_reaction_handler_applies_user_reaction_deltas(
+    message_repo: MessageRepo,
+) -> None:
+    await message_repo.register_message(
+        CHAT_ID,
+        10,
+        user_id=1,
+        posted_at=datetime(2026, 7, 12, tzinfo=UTC),
+    )
+    handler = ReactionHandler(message_repo)
+    fire = ReactionTypeEmoji("🔥")
+    thumb = ReactionTypeEmoji("👍")
+
+    # add → remove → add should net to 1
+    await handler.handle(
+        _make_reaction_update(CHAT_ID, 10, old=(), new=(fire,)),
+        cast(Any, None),
+    )
+    await handler.handle(
+        _make_reaction_update(CHAT_ID, 10, old=(fire,), new=()),
+        cast(Any, None),
+    )
+    await handler.handle(
+        _make_reaction_update(CHAT_ID, 10, old=(), new=(fire,)),
+        cast(Any, None),
+    )
+    assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == {1: 1}
+
+    # two emoji types from one user count as +2
+    await handler.handle(
+        _make_reaction_update(CHAT_ID, 10, old=(fire,), new=(fire, thumb)),
+        cast(Any, None),
+    )
+    assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == {1: 2}
+
+
+async def test_reaction_handler_ignores_untracked_user_reactions(
+    message_repo: MessageRepo,
+) -> None:
+    handler = ReactionHandler(message_repo)
+    await handler.handle(
+        _make_reaction_update(CHAT_ID, 10, old=(), new=(ReactionTypeEmoji("🔥"),)),
+        cast(Any, None),
+    )
     assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == {}
 
 

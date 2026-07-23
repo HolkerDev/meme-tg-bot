@@ -1,5 +1,6 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlmodel import col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -19,13 +20,18 @@ class MessageRepo:
         posted_at: datetime | None = None,
     ) -> None:
         async with AsyncSession(self._engine) as session:
-            message = MessageModel(
+            statement = insert(MessageModel).values(
                 chat_id=chat_id,
                 message_id=message_id,
                 user_id=user_id,
-                posted_at=posted_at or datetime.now(),
+                reaction_count=0,
+                posted_at=posted_at or datetime.now(UTC),
             )
-            session.add(message)
+            statement = statement.on_conflict_do_update(
+                index_elements=["chat_id", "message_id"],
+                set_={"user_id": statement.excluded.user_id},
+            )
+            await session.exec(statement)
             await session.commit()
 
     async def weekly_reaction_counts(self, chat_id: int, since: datetime) -> dict[int, int]:
@@ -51,6 +57,18 @@ class MessageRepo:
             if message is None:
                 return False
             message.reaction_count = count
+            session.add(message)
+            await session.commit()
+            return True
+
+    async def apply_reaction_delta(self, chat_id: int, message_id: int, delta: int) -> bool:
+        if delta == 0:
+            return True
+        async with AsyncSession(self._engine) as session:
+            message = await session.get(MessageModel, (chat_id, message_id))
+            if message is None:
+                return False
+            message.reaction_count = max(0, message.reaction_count + delta)
             session.add(message)
             await session.commit()
             return True
