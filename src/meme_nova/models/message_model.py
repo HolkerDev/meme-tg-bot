@@ -11,5 +11,7 @@ class MessageModel(SQLModel, table=True):
     message_id: int = Field(primary_key=True)
 
     user_id: int = Field(index=True)
+    username: str | None = Field(default=None)
+    display_name: str | None = Field(default=None)
     reaction_count: int = Field(default=0)
     posted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

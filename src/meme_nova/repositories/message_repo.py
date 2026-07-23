@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, datetime
+from typing import NamedTuple
 
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -7,6 +8,13 @@ from sqlmodel import col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from meme_nova.models import MessageModel
+
+
+class WeeklyReactionCount(NamedTuple):
+    user_id: int
+    reaction_count: int
+    username: str | None
+    display_name: str | None
 
 
 class MessageRepo:
@@ -18,6 +26,9 @@ class MessageRepo:
         chat_id: int,
         message_id: int,
         user_id: int,
+        *,
+        username: str | None = None,
+        display_name: str | None = None,
         posted_at: datetime | None = None,
     ) -> None:
         async with AsyncSession(self._engine) as session:
@@ -25,26 +36,47 @@ class MessageRepo:
                 chat_id=chat_id,
                 message_id=message_id,
                 user_id=user_id,
+                username=username,
+                display_name=display_name,
                 reaction_count=0,
                 posted_at=posted_at or datetime.now(UTC),
             )
             statement = statement.on_conflict_do_update(
                 index_elements=["chat_id", "message_id"],
-                set_={"user_id": statement.excluded.user_id},
+                set_={
+                    "user_id": statement.excluded.user_id,
+                    "username": statement.excluded.username,
+                    "display_name": statement.excluded.display_name,
+                },
             )
             await session.exec(statement)
             await session.commit()
 
-    async def weekly_reaction_counts(self, chat_id: int, since: datetime) -> dict[int, int]:
+    async def weekly_reaction_counts(
+        self, chat_id: int, since: datetime
+    ) -> list[WeeklyReactionCount]:
         async with AsyncSession(self._engine) as session:
             statement = (
-                select(MessageModel.user_id, func.sum(MessageModel.reaction_count))
+                select(
+                    MessageModel.user_id,
+                    func.sum(MessageModel.reaction_count),
+                    func.max(MessageModel.username),
+                    func.max(MessageModel.display_name),
+                )
                 .where(MessageModel.chat_id == chat_id)
                 .where(MessageModel.posted_at >= since)
                 .group_by(col(MessageModel.user_id))
             )
             rows = (await session.exec(statement)).all()
-            return {user_id: int(total) for user_id, total in rows}
+            return [
+                WeeklyReactionCount(
+                    user_id=user_id,
+                    reaction_count=int(total),
+                    username=username,
+                    display_name=display_name,
+                )
+                for user_id, total, username, display_name in rows
+            ]
 
     async def distinct_chat_ids(self) -> list[int]:
         async with AsyncSession(self._engine) as session:

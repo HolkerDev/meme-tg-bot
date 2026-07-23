@@ -58,7 +58,13 @@ class GroupMessageHandler(Handler):
             if not handler:
                 continue
             if user and not registered_link:
-                await self._message_repo.register_message(chat.id, msg.message_id, user.id)
+                await self._message_repo.register_message(
+                    chat.id,
+                    msg.message_id,
+                    user.id,
+                    username=user.username,
+                    display_name=user.full_name,
+                )
                 registered_link = True
             await safe_chat_action(msg, ChatAction.TYPING)
             result = await handler.process(url, msg)
@@ -70,7 +76,13 @@ class GroupMessageHandler(Handler):
                     if bot_message_id in registered_bot_message_ids:
                         continue
                     registered_bot_message_ids.add(bot_message_id)
-                    await self._message_repo.register_message(chat.id, bot_message_id, user.id)
+                    await self._message_repo.register_message(
+                        chat.id,
+                        bot_message_id,
+                        user.id,
+                        username=user.username,
+                        display_name=user.full_name,
+                    )
 
     def register(self, app: BotApplication) -> None:
         app.add_handler(MessageHandler(_GROUP_FILTER, self.handle))

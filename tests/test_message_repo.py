@@ -17,10 +17,14 @@ from telegram.constants import ChatType
 
 from meme_nova.handlers.reaction_handler import ReactionHandler
 from meme_nova.models import MessageModel
-from meme_nova.repositories.message_repo import MessageRepo
+from meme_nova.repositories.message_repo import MessageRepo, WeeklyReactionCount
 
 CHAT_ID = 100
 WEEK_START = datetime(2026, 7, 11, tzinfo=UTC)
+
+
+def _counts_map(rows: list[WeeklyReactionCount]) -> dict[int, int]:
+    return {row.user_id: row.reaction_count for row in rows}
 
 
 def _make_reaction_count_update(
@@ -80,13 +84,42 @@ async def test_register_message_upserts_without_resetting_counts(
     await message_repo.register_message(CHAT_ID, 10, user_id=1, posted_at=posted_at)
     await message_repo.update_reaction_count(CHAT_ID, 10, 5)
 
-    await message_repo.register_message(CHAT_ID, 10, user_id=2, posted_at=posted_at)
+    await message_repo.register_message(
+        CHAT_ID,
+        10,
+        user_id=2,
+        username="bob",
+        display_name="Bob",
+        posted_at=posted_at,
+    )
 
     async with AsyncSession(engine) as session:
         message = await session.get(MessageModel, (CHAT_ID, 10))
         assert message is not None
         assert message.user_id == 2
+        assert message.username == "bob"
+        assert message.display_name == "Bob"
         assert message.reaction_count == 5
+
+
+async def test_register_message_persists_username_and_display_name(
+    message_repo: MessageRepo,
+    engine: AsyncEngine,
+) -> None:
+    await message_repo.register_message(
+        CHAT_ID,
+        10,
+        user_id=1,
+        username="alice",
+        display_name="Alice",
+        posted_at=datetime(2026, 7, 12, tzinfo=UTC),
+    )
+
+    async with AsyncSession(engine) as session:
+        message = await session.get(MessageModel, (CHAT_ID, 10))
+        assert message is not None
+        assert message.username == "alice"
+        assert message.display_name == "Alice"
 
 
 async def test_weekly_reaction_counts_per_user_in_channel(message_repo: MessageRepo) -> None:
@@ -122,8 +155,27 @@ async def test_weekly_reaction_counts_per_user_in_channel(message_repo: MessageR
     )
     await message_repo.update_reaction_count(CHAT_ID, 40, 100)
 
-    counts = await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START)
-    assert counts == {1: 5, 2: 1}
+    rows = await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START)
+    assert _counts_map(rows) == {1: 5, 2: 1}
+
+
+async def test_weekly_reaction_counts_include_identity(message_repo: MessageRepo) -> None:
+    await message_repo.register_message(
+        CHAT_ID,
+        10,
+        user_id=1,
+        username="alice",
+        display_name="Alice",
+        posted_at=datetime(2026, 7, 12, tzinfo=UTC),
+    )
+    await message_repo.update_reaction_count(CHAT_ID, 10, 3)
+
+    rows = await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START)
+    assert len(rows) == 1
+    assert rows[0].user_id == 1
+    assert rows[0].reaction_count == 3
+    assert rows[0].username == "alice"
+    assert rows[0].display_name == "Alice"
 
 
 async def test_weekly_reaction_counts_are_scoped_to_channel(message_repo: MessageRepo) -> None:
@@ -143,8 +195,8 @@ async def test_weekly_reaction_counts_are_scoped_to_channel(message_repo: Messag
     )
     await message_repo.update_reaction_count(200, 10, 7)
 
-    assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == {1: 4}
-    assert await message_repo.weekly_reaction_counts(200, WEEK_START) == {1: 7}
+    assert _counts_map(await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START)) == {1: 4}
+    assert _counts_map(await message_repo.weekly_reaction_counts(200, WEEK_START)) == {1: 7}
 
 
 async def test_reaction_handler_updates_weekly_counts(
@@ -168,8 +220,7 @@ async def test_reaction_handler_updates_weekly_counts(
     )
     await handler.handle(update, cast(Any, None))
 
-    counts = await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START)
-    assert counts == {1: 3}
+    assert _counts_map(await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START)) == {1: 3}
 
 
 async def test_link_and_bot_video_share_user_id(message_repo: MessageRepo) -> None:
@@ -195,7 +246,7 @@ async def test_link_and_bot_video_share_user_id(message_repo: MessageRepo) -> No
     await message_repo.update_reaction_count(CHAT_ID, link_message_id, 3)
     await message_repo.update_reaction_count(CHAT_ID, bot_video_message_id, 2)
 
-    counts = await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START)
+    counts = _counts_map(await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START))
     assert counts == {author_user_id: 5}
     assert bot_user_id not in counts
 
@@ -210,7 +261,7 @@ async def test_reaction_handler_ignores_untracked_messages(message_repo: Message
 
     await handler.handle(update, cast(Any, None))
 
-    assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == {}
+    assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == []
 
 
 async def test_apply_reaction_delta_clamps_at_zero(message_repo: MessageRepo) -> None:
@@ -223,7 +274,7 @@ async def test_apply_reaction_delta_clamps_at_zero(message_repo: MessageRepo) ->
     await message_repo.update_reaction_count(CHAT_ID, 10, 1)
 
     assert await message_repo.apply_reaction_delta(CHAT_ID, 10, -5) is True
-    assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == {1: 0}
+    assert _counts_map(await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START)) == {1: 0}
     assert await message_repo.apply_reaction_delta(CHAT_ID, 99, 1) is False
 
 
@@ -253,14 +304,14 @@ async def test_reaction_handler_applies_user_reaction_deltas(
         _make_reaction_update(CHAT_ID, 10, old=(), new=(fire,)),
         cast(Any, None),
     )
-    assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == {1: 1}
+    assert _counts_map(await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START)) == {1: 1}
 
     # two emoji types from one user count as +2
     await handler.handle(
         _make_reaction_update(CHAT_ID, 10, old=(fire,), new=(fire, thumb)),
         cast(Any, None),
     )
-    assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == {1: 2}
+    assert _counts_map(await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START)) == {1: 2}
 
 
 async def test_reaction_handler_ignores_untracked_user_reactions(
@@ -271,7 +322,7 @@ async def test_reaction_handler_ignores_untracked_user_reactions(
         _make_reaction_update(CHAT_ID, 10, old=(), new=(ReactionTypeEmoji("🔥"),)),
         cast(Any, None),
     )
-    assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == {}
+    assert await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START) == []
 
 
 async def test_distinct_chat_ids(message_repo: MessageRepo) -> None:

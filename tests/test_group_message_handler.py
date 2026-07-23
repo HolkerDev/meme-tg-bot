@@ -50,13 +50,15 @@ def _make_group_link_update(
     chat_id: int = CHAT_ID,
     message_id: int = LINK_MESSAGE_ID,
     user_id: int = AUTHOR_USER_ID,
+    username: str | None = "alice",
+    first_name: str = "Alice",
     url: str = INSTAGRAM_URL,
 ) -> Update:
     text = f"check this {url}"
     offset = text.index(url)
     entities = (MessageEntity(type=MessageEntity.URL, offset=offset, length=len(url)),)
     chat = Chat(id=chat_id, type=ChatType.GROUP, title="Test")
-    user = User(id=user_id, is_bot=False, first_name="Alice")
+    user = User(id=user_id, is_bot=False, first_name=first_name, username=username)
     message = Message(
         message_id=message_id,
         date=datetime.now(tz=UTC),
@@ -68,10 +70,16 @@ def _make_group_link_update(
     return Update(update_id=1, message=message)
 
 
-async def _get_user_id(engine: AsyncEngine, chat_id: int, message_id: int) -> int | None:
+async def _get_message(
+    engine: AsyncEngine, chat_id: int, message_id: int
+) -> MessageModel | None:
     async with AsyncSession(engine) as session:
-        message = await session.get(MessageModel, (chat_id, message_id))
-        return message.user_id if message is not None else None
+        return await session.get(MessageModel, (chat_id, message_id))
+
+
+async def _get_user_id(engine: AsyncEngine, chat_id: int, message_id: int) -> int | None:
+    message = await _get_message(engine, chat_id, message_id)
+    return message.user_id if message is not None else None
 
 
 async def test_registers_link_message_when_user_posts_valid_url(
@@ -83,7 +91,11 @@ async def test_registers_link_message_when_user_posts_valid_url(
 
     await handler.handle(update, cast(Any, None))
 
-    assert await _get_user_id(engine, CHAT_ID, LINK_MESSAGE_ID) == AUTHOR_USER_ID
+    message = await _get_message(engine, CHAT_ID, LINK_MESSAGE_ID)
+    assert message is not None
+    assert message.user_id == AUTHOR_USER_ID
+    assert message.username == "alice"
+    assert message.display_name == "Alice"
 
 
 async def test_registers_bot_video_with_same_user_id_after_successful_process(

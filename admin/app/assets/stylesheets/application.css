@@ -1,10 +1,99 @@
-/*
- * This is a manifest file that'll be compiled into application.css.
- *
- * With Propshaft, assets are served efficiently without preprocessing steps. You can still include
- * application-wide styles in this file, but keep in mind that CSS precedence will follow the standard
- * cascading order, meaning styles declared later in the document or manifest will override earlier ones,
- * depending on specificity.
- *
- * Consider organizing styles into separate files for maintainability.
- */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --text: #1a1f24;
+  --muted: #5b6570;
+  --border: #d7dde3;
+  --accent: #0b6e4f;
+  --accent-soft: #e7f4ef;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #eef3f1 0%, var(--bg) 40%);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.page {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 3rem;
+}
+
+.page-header h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 1.75rem;
+  letter-spacing: -0.02em;
+}
+
+.page-header p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.breadcrumb {
+  font-size: 0.9rem;
+}
+
+.breadcrumb a,
+.data-table a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover,
+.data-table a:hover {
+  text-decoration: underline;
+}
+
+.empty {
+  margin-top: 1.5rem;
+  color: var(--muted);
+}
+
+.data-table {
+  width: 100%;
+  margin-top: 1.5rem;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--accent-soft);
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.user-label {
+  display: block;
+  font-weight: 600;
+}
+
+.user-id {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}

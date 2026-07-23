@@ -10,7 +10,7 @@ migrate:
 	uv run alembic upgrade head
 
 admin:
-	cd admin && bin/rails server
+	cd admin && bin/rails server -b 0.0.0.0 -p 3000
 
 format:
 	uv run ruff format src tests
