@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy.dialects.sqlite import insert
@@ -67,6 +68,7 @@ class MessageRepo:
         async with AsyncSession(self._engine) as session:
             message = await session.get(MessageModel, (chat_id, message_id))
             if message is None:
+                logging.log(logging.WARNING, "could not find message to apply delta to")
                 return False
             message.reaction_count = max(0, message.reaction_count + delta)
             session.add(message)
