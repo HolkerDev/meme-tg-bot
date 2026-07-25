@@ -6,6 +6,7 @@ from pathlib import Path
 
 from telegram import Message
 from yt_dlp import YoutubeDL
+from yt_dlp.networking.impersonate import ImpersonateTarget
 from yt_dlp.utils import DownloadError
 
 from . import gallery_dl
@@ -105,12 +106,11 @@ class InstagramHandler:
             "noprogress": True,
             "noplaylist": True,
             "max_filesize": self._max_filesize,
+            # Instagram blocks non-browser TLS fingerprints; requires curl_cffi.
+            # Do not pass cookies here: stale/challenged sessions break the
+            # logged-in API path. Cookies are used only for gallery-dl (photos).
+            "impersonate": ImpersonateTarget.from_str("chrome"),
         }
-        if self._cookies_file:
-            opts["cookiefile"] = self._cookies_file
-        elif self._username and self._password:
-            opts["username"] = self._username
-            opts["password"] = self._password
         return opts
 
     def _download(self, url: str) -> list[tuple[bytes, bool]] | None:
