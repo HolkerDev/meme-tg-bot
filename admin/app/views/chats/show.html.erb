@@ -1,0 +1,35 @@
+<% content_for :title, "Chat #{@chat_id}" %>
+
+<section class="page">
+  <header class="page-header">
+    <p class="breadcrumb"><%= link_to "Chats", root_path %> / <%= @chat_id %></p>
+    <h1>Chat <%= @chat_id %></h1>
+    <p>Weekly reaction leaderboard since <%= @since.utc.strftime("%Y-%m-%d %H:%M UTC") %> (last 7 days).</p>
+  </header>
+
+  <% if @entries.empty? %>
+    <p class="empty">No reactions in this window.</p>
+  <% else %>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>User</th>
+          <th>Reactions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @entries.each_with_index do |entry, index| %>
+          <tr>
+            <td><%= index + 1 %></td>
+            <td>
+              <span class="user-label"><%= entry[:label] %></span>
+              <span class="user-id">id <%= entry[:user_id] %></span>
+            </td>
+            <td><%= entry[:reaction_count] %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>

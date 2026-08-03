@@ -1,0 +1,31 @@
+<% content_for :title, "Chats" %>
+
+<section class="page">
+  <header class="page-header">
+    <h1>Chats</h1>
+    <p>Groups where the bot has processed messages. Reaction totals use the last 7 days.</p>
+  </header>
+
+  <% if @chats.empty? %>
+    <p class="empty">No chats yet.</p>
+  <% else %>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Chat ID</th>
+          <th>Messages</th>
+          <th>Reactions (7d)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @chats.each do |chat| %>
+          <tr>
+            <td><%= link_to chat[:chat_id], chat_path(chat[:chat_id]) %></td>
+            <td><%= chat[:message_count] %></td>
+            <td><%= chat[:weekly_reaction_total] %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>
