@@ -12,7 +12,14 @@ from meme_nova.types import BotApplication
 
 logger = logging.getLogger(__name__)
 
-_GROUP_FILTER = filters.ChatType.GROUPS & ~filters.COMMAND & ~filters.StatusUpdate.ALL
+# MESSAGE only: Telegram may send edited_message when reactions change (same URL),
+# which must not re-trigger downloads.
+_GROUP_FILTER = (
+    filters.UpdateType.MESSAGE
+    & filters.ChatType.GROUPS
+    & ~filters.COMMAND
+    & ~filters.StatusUpdate.ALL
+)
 
 
 def extract_urls(message: Message) -> list[str]:
@@ -35,7 +42,9 @@ class GroupMessageHandler(Handler):
         self._message_repo = message_repo
 
     async def handle(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-        msg = update.effective_message
+        # Use update.message (not effective_message) so reaction-triggered
+        # edited_message updates are ignored even if this callback is invoked directly.
+        msg = update.message
         chat = update.effective_chat
         user = update.effective_user
         if not msg or not chat:

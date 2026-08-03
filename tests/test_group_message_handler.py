@@ -29,6 +29,7 @@ class StubPlatformHandler:
     ) -> None:
         self._bot_message_ids = bot_message_ids
         self._ok = ok
+        self.process_calls: list[str] = []
 
     @property
     def platform(self) -> Platform:
@@ -38,11 +39,38 @@ class StubPlatformHandler:
         return "instagram.com" in url
 
     async def process(self, url: str, message: Message) -> ProcessResult:
+        self.process_calls.append(url)
         if not self._ok:
             return ProcessResult.failure()
         if self._bot_message_ids:
             return ProcessResult.success(*self._bot_message_ids)
         return ProcessResult.skipped()
+
+
+def _make_group_link_message(
+    *,
+    chat_id: int = CHAT_ID,
+    message_id: int = LINK_MESSAGE_ID,
+    user_id: int = AUTHOR_USER_ID,
+    username: str | None = "alice",
+    first_name: str = "Alice",
+    url: str = INSTAGRAM_URL,
+    edit_date: datetime | None = None,
+) -> Message:
+    text = f"check this {url}"
+    offset = text.index(url)
+    entities = (MessageEntity(type=MessageEntity.URL, offset=offset, length=len(url)),)
+    chat = Chat(id=chat_id, type=ChatType.GROUP, title="Test")
+    user = User(id=user_id, is_bot=False, first_name=first_name, username=username)
+    return Message(
+        message_id=message_id,
+        date=datetime.now(tz=UTC),
+        chat=chat,
+        from_user=user,
+        text=text,
+        entities=entities,
+        edit_date=edit_date,
+    )
 
 
 def _make_group_link_update(
@@ -54,20 +82,37 @@ def _make_group_link_update(
     first_name: str = "Alice",
     url: str = INSTAGRAM_URL,
 ) -> Update:
-    text = f"check this {url}"
-    offset = text.index(url)
-    entities = (MessageEntity(type=MessageEntity.URL, offset=offset, length=len(url)),)
-    chat = Chat(id=chat_id, type=ChatType.GROUP, title="Test")
-    user = User(id=user_id, is_bot=False, first_name=first_name, username=username)
-    message = Message(
+    message = _make_group_link_message(
+        chat_id=chat_id,
         message_id=message_id,
-        date=datetime.now(tz=UTC),
-        chat=chat,
-        from_user=user,
-        text=text,
-        entities=entities,
+        user_id=user_id,
+        username=username,
+        first_name=first_name,
+        url=url,
     )
     return Update(update_id=1, message=message)
+
+
+def _make_group_link_edited_update(
+    *,
+    chat_id: int = CHAT_ID,
+    message_id: int = LINK_MESSAGE_ID,
+    user_id: int = AUTHOR_USER_ID,
+    username: str | None = "alice",
+    first_name: str = "Alice",
+    url: str = INSTAGRAM_URL,
+) -> Update:
+    """Simulate Telegram's edited_message update sent when a reaction changes."""
+    message = _make_group_link_message(
+        chat_id=chat_id,
+        message_id=message_id,
+        user_id=user_id,
+        username=username,
+        first_name=first_name,
+        url=url,
+        edit_date=datetime.now(tz=UTC),
+    )
+    return Update(update_id=2, edited_message=message)
 
 
 async def _get_message(
@@ -175,3 +220,20 @@ async def test_registers_link_once_for_multiple_urls(
     await handler.handle(update, cast(Any, None))
 
     assert await _get_user_id(engine, CHAT_ID, LINK_MESSAGE_ID) == AUTHOR_USER_ID
+
+
+async def test_does_not_redownload_when_reaction_triggers_edited_message(
+    message_repo: MessageRepo,
+) -> None:
+    """Telegram may send edited_message when a reaction changes, with the same URL.
+
+    The bot must not download/send the video again for that non-content update.
+    """
+    platform = StubPlatformHandler(bot_message_ids=(BOT_VIDEO_MESSAGE_ID,))
+    handler = GroupMessageHandler((platform,), message_repo)
+
+    await handler.handle(_make_group_link_update(), cast(Any, None))
+    assert platform.process_calls == [INSTAGRAM_URL]
+
+    await handler.handle(_make_group_link_edited_update(), cast(Any, None))
+    assert platform.process_calls == [INSTAGRAM_URL]
