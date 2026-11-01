@@ -31,7 +31,7 @@ async def test_publish_weekly_reaction_reports_uses_db_username(
     call = bot.send_message.await_args
     assert call is not None
     assert call.kwargs["chat_id"] == CHAT_ID
-    assert "@alice — 4 reactions" in call.kwargs["text"]
+    assert "@alice - 0 потужнолайків (4)" in call.kwargs["text"]
 
 
 async def test_publish_weekly_reaction_reports_falls_back_to_telegram(
@@ -59,7 +59,7 @@ async def test_publish_weekly_reaction_reports_falls_back_to_telegram(
     call = bot.send_message.await_args
     assert call is not None
     assert call.kwargs["chat_id"] == CHAT_ID
-    assert "@alice — 4 reactions" in call.kwargs["text"]
+    assert "@alice - 0 потужнолайків (4)" in call.kwargs["text"]
 
 
 async def test_publish_weekly_reaction_reports_skips_channels_without_reactions(
@@ -112,4 +112,4 @@ async def test_publish_weekly_reaction_reports_includes_super_likes_without_reac
     await publish_weekly_reaction_reports(cast(Any, bot), message_repo)
 
     bot.send_message.assert_awaited_once()
-    assert "@alice — 0 reactions · 1 super like" in bot.send_message.await_args.kwargs["text"]
+    assert "@alice - 1 потужнолайк (0)" in bot.send_message.await_args.kwargs["text"]

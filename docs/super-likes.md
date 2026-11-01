@@ -13,8 +13,9 @@ cannot Super Like their own video. The next Berlin day, the user can choose any
 video, including one they liked before.
 
 Super Likes are stored separately from ordinary Telegram reactions. The Friday
-leaderboard shows each sender's Super Like total alongside their reaction total;
-it still ranks senders by ordinary reactions. A Super Like is attributed to the
+leaderboard ranks senders by Super Likes, with ordinary reactions as a tie-breaker.
+Each row shows the Super Like total and the reaction count in parentheses, for
+example `1. @alice - 2 потужнолайка (12)`. A Super Like is attributed to the
 user who posted the original link, because the bot's video reply is registered
 to that user.
 

@@ -15,14 +15,24 @@ class WeeklyReactionReportFormatter:
 
         ranked = sorted(
             entries,
-            key=lambda entry: (-entry.reaction_count, entry.display_name.casefold()),
+            key=lambda entry: (
+                -entry.super_like_count,
+                -entry.reaction_count,
+                entry.display_name.casefold(),
+            ),
         )
-        lines = ["Weekly reaction leaderboard", ""]
+        lines = ["Потужні лайки тижня", ""]
         for rank, entry in enumerate(ranked, start=1):
-            reaction_label = "reaction" if entry.reaction_count == 1 else "reactions"
-            line = f"{rank}. {entry.display_name} — {entry.reaction_count} {reaction_label}"
-            if entry.super_like_count:
-                super_like_label = "super like" if entry.super_like_count == 1 else "super likes"
-                line += f" · {entry.super_like_count} {super_like_label}"
-            lines.append(line)
+            count = entry.super_like_count
+            if count % 100 in (11, 12, 13, 14):
+                label = "потужнолайків"
+            elif count % 10 == 1:
+                label = "потужнолайк"
+            elif count % 10 in (2, 3, 4):
+                label = "потужнолайка"
+            else:
+                label = "потужнолайків"
+            lines.append(
+                f"{rank}. {entry.display_name} - {count} {label} ({entry.reaction_count})"
+            )
         return "\n".join(lines)
