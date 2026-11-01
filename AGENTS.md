@@ -1,5 +1,10 @@
 # Agent notes
 
+## Main chat
+
+The main Telegram chat is **Memeproxy**, chat ID `-1002564248375`. Use the chat
+ID for chat-specific behavior; the title may change.
+
 ## Project docs
 
 Operational and domain knowledge lives in [`docs/`](docs/). Read the relevant
