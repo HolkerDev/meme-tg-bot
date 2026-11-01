@@ -76,6 +76,25 @@ async def test_register_message_and_update_reaction_count(message_repo: MessageR
     assert updated is False
 
 
+async def test_super_like_is_once_per_berlin_day_per_voter(message_repo: MessageRepo) -> None:
+    await message_repo.register_message(CHAT_ID, 10, user_id=1, posted_at=WEEK_START)
+    await message_repo.register_message(CHAT_ID, 11, user_id=3, posted_at=WEEK_START)
+    first_day = datetime(2026, 7, 12, 22, 30, tzinfo=UTC)
+    same_berlin_day = datetime(2026, 7, 13, 21, 30, tzinfo=UTC)
+    next_berlin_day = datetime(2026, 7, 13, 22, 30, tzinfo=UTC)
+
+    assert await message_repo.add_super_like(CHAT_ID, 10, 2, now=first_day) == "added"
+    assert await message_repo.add_super_like(CHAT_ID, 11, 2, now=same_berlin_day) == "already_today"
+    assert await message_repo.add_super_like(CHAT_ID, 10, 2, now=next_berlin_day) == "added"
+    assert await message_repo.add_super_like(CHAT_ID, 10, 1, now=next_berlin_day) == "self"
+    assert await message_repo.add_super_like(CHAT_ID, 99, 4, now=next_berlin_day) == "unknown"
+
+    rows = await message_repo.weekly_reaction_counts(CHAT_ID, WEEK_START)
+    assert {row.user_id: row.super_like_count for row in rows} == {1: 2, 3: 0}
+    assert await message_repo.super_like_count(CHAT_ID, 10) == 2
+    assert await message_repo.super_like_count(CHAT_ID, 11) == 0
+
+
 async def test_register_message_upserts_without_resetting_counts(
     message_repo: MessageRepo,
     engine: AsyncEngine,

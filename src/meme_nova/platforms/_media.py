@@ -1,7 +1,14 @@
 from io import BytesIO
 
-from telegram import InputMediaPhoto, InputMediaVideo, Message
+from telegram import (
+    InputMediaPhoto,
+    InputMediaVideo,
+    Message,
+)
 from telegram.constants import ChatAction
+
+from meme_nova.constants import MAIN_CHAT_ID
+from meme_nova.super_like import super_like_markup
 
 from .base import MEDIA_GROUP_LIMIT, safe_chat_action
 
@@ -14,7 +21,10 @@ async def send_media_bytes(message: Message, items: list[tuple[bytes, bool]]) ->
         action = ChatAction.UPLOAD_VIDEO if is_video else ChatAction.UPLOAD_PHOTO
         await safe_chat_action(message, action)
         if is_video:
-            single = await message.reply_video(video=BytesIO(data))
+            markup = None
+            if message.chat.id == MAIN_CHAT_ID:
+                markup = super_like_markup(0)
+            single = await message.reply_video(video=BytesIO(data), reply_markup=markup)
         else:
             single = await message.reply_photo(photo=BytesIO(data))
         return (single.message_id,)

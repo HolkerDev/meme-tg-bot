@@ -2,7 +2,8 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
-from meme_nova.reports.weekly_reaction_job import MAIN_CHAT_ID, publish_weekly_reaction_reports
+from meme_nova.constants import MAIN_CHAT_ID
+from meme_nova.reports.weekly_reaction_job import publish_weekly_reaction_reports
 from meme_nova.repositories.message_repo import MessageRepo
 
 CHAT_ID = MAIN_CHAT_ID
@@ -93,3 +94,22 @@ async def test_publish_weekly_reaction_reports_only_targets_main_chat(
     await publish_weekly_reaction_reports(cast(Any, bot), message_repo)
 
     bot.send_message.assert_not_awaited()
+
+
+async def test_publish_weekly_reaction_reports_includes_super_likes_without_reactions(
+    message_repo: MessageRepo,
+) -> None:
+    await message_repo.register_message(
+        CHAT_ID,
+        10,
+        user_id=1,
+        username="alice",
+        posted_at=datetime.now(tz=UTC),
+    )
+    assert await message_repo.add_super_like(CHAT_ID, 10, 2) == "added"
+
+    bot = AsyncMock()
+    await publish_weekly_reaction_reports(cast(Any, bot), message_repo)
+
+    bot.send_message.assert_awaited_once()
+    assert "@alice — 0 reactions · 1 super like" in bot.send_message.await_args.kwargs["text"]

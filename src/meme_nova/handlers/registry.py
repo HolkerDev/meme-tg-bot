@@ -1,6 +1,7 @@
 from meme_nova.handlers.base import Handler
 from meme_nova.handlers.group_message_handler import GroupMessageHandler
 from meme_nova.handlers.reaction_handler import ReactionHandler
+from meme_nova.handlers.super_like_handler import SuperLikeHandler
 from meme_nova.platforms import build_handlers
 from meme_nova.repositories.message_repo import MessageRepo
 from meme_nova.settings import Settings
@@ -21,6 +22,7 @@ def build_update_handlers(
     return (
         GroupMessageHandler(platform_handlers, message_repo),
         ReactionHandler(message_repo),
+        SuperLikeHandler(message_repo),
     )
 
 

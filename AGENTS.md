@@ -15,6 +15,8 @@ Notable entries:
 - [`docs/instagram.md`](docs/instagram.md) — Instagram download pipeline
   (yt-dlp + impersonation for video, gallery-dl + cookies for photos), failure
   modes, and cookie refresh.
+- [`docs/super-likes.md`](docs/super-likes.md) — Main-chat Super Like button,
+  daily limit, leaderboard totals, and migration.
 
 ## Skills
 

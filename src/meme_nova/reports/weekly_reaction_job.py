@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 from telegram import Bot
 
+from meme_nova.constants import MAIN_CHAT_ID
 from meme_nova.reports.weekly_reaction_formatter import (
     WeeklyReactionEntry,
     WeeklyReactionReportFormatter,
@@ -12,7 +13,6 @@ from meme_nova.repositories.message_repo import MessageRepo, WeeklyReactionCount
 logger = logging.getLogger(__name__)
 
 WEEKLY_REPORT_WINDOW = timedelta(days=7)
-MAIN_CHAT_ID = -1002564248375
 
 
 def _display_name_from_row(row: WeeklyReactionCount) -> str | None:
@@ -46,7 +46,7 @@ async def publish_weekly_reaction_reports(bot: Bot, message_repo: MessageRepo) -
     formatter = WeeklyReactionReportFormatter()
 
     rows = await message_repo.weekly_reaction_counts(MAIN_CHAT_ID, since)
-    rows = [row for row in rows if row.reaction_count > 0]
+    rows = [row for row in rows if row.reaction_count > 0 or row.super_like_count > 0]
     if not rows:
         return
 
@@ -59,6 +59,7 @@ async def publish_weekly_reaction_reports(bot: Bot, message_repo: MessageRepo) -
             WeeklyReactionEntry(
                 display_name=display_name,
                 reaction_count=row.reaction_count,
+                super_like_count=row.super_like_count,
             )
         )
     text = formatter.format(entries)

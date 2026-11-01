@@ -40,3 +40,16 @@ def test_formatter_breaks_ties_alphabetically() -> None:
 
     assert "1. Amy — 3 reactions" in text
     assert "2. Zed — 3 reactions" in text
+
+
+def test_super_like_is_shown_separately_from_reactions() -> None:
+    formatter = WeeklyReactionReportFormatter()
+    entries = [
+        WeeklyReactionEntry(display_name="@alice", reaction_count=1, super_like_count=1),
+        WeeklyReactionEntry(display_name="@bob", reaction_count=5),
+    ]
+
+    text = formatter.format(entries)
+
+    assert "1. @bob — 5 reactions" in text
+    assert "2. @alice — 1 reaction · 1 super like" in text
