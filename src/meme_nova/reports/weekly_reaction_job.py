@@ -12,6 +12,7 @@ from meme_nova.repositories.message_repo import MessageRepo, WeeklyReactionCount
 logger = logging.getLogger(__name__)
 
 WEEKLY_REPORT_WINDOW = timedelta(days=7)
+MAIN_CHAT_ID = -1002564248375
 
 
 def _display_name_from_row(row: WeeklyReactionCount) -> str | None:
@@ -44,23 +45,22 @@ async def publish_weekly_reaction_reports(bot: Bot, message_repo: MessageRepo) -
     since = datetime.now(tz=UTC) - WEEKLY_REPORT_WINDOW
     formatter = WeeklyReactionReportFormatter()
 
-    for chat_id in await message_repo.distinct_chat_ids():
-        rows = await message_repo.weekly_reaction_counts(chat_id, since)
-        rows = [row for row in rows if row.reaction_count > 0]
-        if not rows:
-            continue
+    rows = await message_repo.weekly_reaction_counts(MAIN_CHAT_ID, since)
+    rows = [row for row in rows if row.reaction_count > 0]
+    if not rows:
+        return
 
-        entries: list[WeeklyReactionEntry] = []
-        for row in rows:
-            display_name = _display_name_from_row(row)
-            if display_name is None:
-                display_name = await _resolve_display_name(bot, chat_id, row.user_id)
-            entries.append(
-                WeeklyReactionEntry(
-                    display_name=display_name,
-                    reaction_count=row.reaction_count,
-                )
+    entries: list[WeeklyReactionEntry] = []
+    for row in rows:
+        display_name = _display_name_from_row(row)
+        if display_name is None:
+            display_name = await _resolve_display_name(bot, MAIN_CHAT_ID, row.user_id)
+        entries.append(
+            WeeklyReactionEntry(
+                display_name=display_name,
+                reaction_count=row.reaction_count,
             )
-        text = formatter.format(entries)
-        await bot.send_message(chat_id=chat_id, text=text)
-        logger.info("posted weekly reaction report chat_id=%s users=%s", chat_id, len(entries))
+        )
+    text = formatter.format(entries)
+    await bot.send_message(chat_id=MAIN_CHAT_ID, text=text)
+    logger.info("posted weekly reaction report chat_id=%s users=%s", MAIN_CHAT_ID, len(entries))

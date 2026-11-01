@@ -2,10 +2,11 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
-from meme_nova.reports.weekly_reaction_job import publish_weekly_reaction_reports
+from meme_nova.reports.weekly_reaction_job import MAIN_CHAT_ID, publish_weekly_reaction_reports
 from meme_nova.repositories.message_repo import MessageRepo
 
-CHAT_ID = 100
+CHAT_ID = MAIN_CHAT_ID
+OTHER_CHAT_ID = 100
 
 
 async def test_publish_weekly_reaction_reports_uses_db_username(
@@ -69,6 +70,24 @@ async def test_publish_weekly_reaction_reports_skips_channels_without_reactions(
         user_id=1,
         posted_at=datetime.now(tz=UTC),
     )
+
+    bot = AsyncMock()
+    await publish_weekly_reaction_reports(cast(Any, bot), message_repo)
+
+    bot.send_message.assert_not_awaited()
+
+
+async def test_publish_weekly_reaction_reports_only_targets_main_chat(
+    message_repo: MessageRepo,
+) -> None:
+    await message_repo.register_message(
+        OTHER_CHAT_ID,
+        10,
+        user_id=2,
+        username="bob",
+        posted_at=datetime.now(tz=UTC),
+    )
+    await message_repo.update_reaction_count(OTHER_CHAT_ID, 10, 9)
 
     bot = AsyncMock()
     await publish_weekly_reaction_reports(cast(Any, bot), message_repo)
