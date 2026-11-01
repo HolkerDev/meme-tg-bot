@@ -593,7 +593,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "python-telegram-bot", extras = ["rate-limiter"], specifier = ">=22.7" },
     { name = "sqlmodel", specifier = ">=0.0.39" },
-    { name = "yt-dlp", extras = ["curl-cffi", "default"], specifier = ">=2026.7.4" },
+    { name = "yt-dlp", extras = ["curl-cffi", "default"], specifier = "==2026.8.19" },
 ]
 
 [package.metadata.requires-dev]
@@ -1074,11 +1074,11 @@ wheels = [
 
 [[package]]
 name = "yt-dlp"
-version = "2026.8.4.234419.dev0"
+version = "2026.8.19"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/04/2b/19f646f9b7c94821a2c001cbd18cea6288f41c76708f0800b777abb699c6/yt_dlp-2026.8.4.234419.dev0.tar.gz", hash = "sha256:776bf1ca11985dfb9a3ba3f7fbda021720c70a064e1125bca51e76d5f456dd1c", size = 3050839, upload-time = "2026-08-04T23:48:50.46Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1e/e0/832fa4ca334b766a06933a196066edc3dba37cdb6f14cd98d59bcc69a4b4/yt_dlp-2026.8.19.tar.gz", hash = "sha256:9e213e48cea35c66b378e4447903f118f6392a5fa380a2b6d7070ec86f4e0af1", size = 3052025, upload-time = "2026-08-19T23:48:59.291Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/94/bc/b000ab6ccf4d12067175608eab675ac4e57f2e37577fa9b3fcd360558d6d/yt_dlp-2026.8.4.234419.dev0-py3-none-any.whl", hash = "sha256:f5cdc64d5745182c7f40bace2dfc42a7884a9bed69e6691efbf4fe7d339e0e52", size = 3185299, upload-time = "2026-08-04T23:48:48.234Z" },
+    { url = "https://files.pythonhosted.org/packages/69/b2/8cd1613f56eed7ceb64fbd4df3f1c01246bfb098e6f398228bafda22b80b/yt_dlp-2026.8.19-py3-none-any.whl", hash = "sha256:1d57897e94c6665a0a6f9bc54b34e584284e32c034ffab3a7df25d8f7b24eedf", size = 3185533, upload-time = "2026-08-19T23:48:56.925Z" },
 ]
 
 [package.optional-dependencies]
