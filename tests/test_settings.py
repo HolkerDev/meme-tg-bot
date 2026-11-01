@@ -16,6 +16,7 @@ def test_load_uses_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("INSTAGRAM_USERNAME", raising=False)
     monkeypatch.delenv("INSTAGRAM_PASSWORD", raising=False)
     monkeypatch.delenv("INSTAGRAM_SESSION_FILE", raising=False)
+    monkeypatch.delenv("TIKTOK_COOKIES_FILE", raising=False)
     monkeypatch.setattr("meme_nova.settings.load_dotenv", lambda: None)
     s = Settings.load()
     assert s.telegram_bot_token == "abc"
@@ -23,6 +24,7 @@ def test_load_uses_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.instagram_username is None
     assert s.instagram_password is None
     assert s.instagram_session_file is None
+    assert s.tiktok_cookies_file is None
 
 
 def test_load_reads_instagram_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -35,3 +37,10 @@ def test_load_reads_instagram_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.instagram_username == "memebot"
     assert s.instagram_password == "hunter2"
     assert s.instagram_session_file == "/tmp/session-memebot"
+
+
+def test_load_reads_tiktok_cookies_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "abc")
+    monkeypatch.setenv("TIKTOK_COOKIES_FILE", "/tmp/tiktok-cookies.txt")
+    monkeypatch.setattr("meme_nova.settings.load_dotenv", lambda: None)
+    assert Settings.load().tiktok_cookies_file == "/tmp/tiktok-cookies.txt"

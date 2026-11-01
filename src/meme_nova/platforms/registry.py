@@ -13,6 +13,7 @@ def build_handlers(
     instagram_password: str | None = None,
     instagram_session_file: str | None = None,
     instagram_cookies_file: str | None = None,
+    tiktok_cookies_file: str | None = None,
 ) -> tuple[PlatformHandler, ...]:
     return (
         InstagramHandler(
@@ -21,7 +22,7 @@ def build_handlers(
             session_file=instagram_session_file,
             cookies_file=instagram_cookies_file,
         ),
-        TikTokHandler(),
+        TikTokHandler(cookies_file=tiktok_cookies_file),
         YouTubeHandler(),
         TwitterHandler(),
         reddit.handler,

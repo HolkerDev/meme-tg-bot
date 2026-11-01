@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from meme_nova.platforms import (
@@ -7,6 +9,8 @@ from meme_nova.platforms import (
     detect_platform,
     find_handler,
 )
+from meme_nova.platforms.tiktok import TikTokHandler
+from meme_nova.platforms.youtube import YouTubeHandler
 
 HANDLERS = build_handlers()
 
@@ -65,3 +69,12 @@ async def test_default_handler_process_logs_only() -> None:
     assert handler is not None
     assert handler.platform == Platform.YOUTUBE
     await handler.process("https://www.youtube.com/watch?v=abc", message=None)  # type: ignore[arg-type]
+
+
+def test_tiktok_cookies_are_not_used_by_other_yt_dlp_handlers() -> None:
+    handlers = build_handlers(tiktok_cookies_file="/tmp/tiktok-cookies.txt")
+    tiktok = next(handler for handler in handlers if isinstance(handler, TikTokHandler))
+    youtube = next(handler for handler in handlers if isinstance(handler, YouTubeHandler))
+
+    assert tiktok._ydl_opts(Path("/tmp"))["cookiefile"] == "/tmp/tiktok-cookies.txt"
+    assert "cookiefile" not in youtube._ydl_opts(Path("/tmp"))

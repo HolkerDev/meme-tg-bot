@@ -11,9 +11,9 @@ from . import gallery_dl
 from ._media import send_media_bytes
 from .base import (
     DEFAULT_MAX_DURATION_SECONDS,
-    ProcessResult,
     TELEGRAM_BOT_UPLOAD_LIMIT_BYTES,
     Platform,
+    ProcessResult,
     host_matches,
 )
 
@@ -28,9 +28,11 @@ class YtDlpHandler:
         self,
         max_duration_seconds: int = DEFAULT_MAX_DURATION_SECONDS,
         max_filesize_bytes: int = TELEGRAM_BOT_UPLOAD_LIMIT_BYTES,
+        cookies_file: str | None = None,
     ) -> None:
         self._max_duration = max_duration_seconds
         self._max_filesize = max_filesize_bytes
+        self._cookies_file = cookies_file
 
     def matches(self, url: str) -> bool:
         return host_matches(url, self.hosts)
@@ -68,19 +70,25 @@ class YtDlpHandler:
             return ProcessResult.failure()
         return ProcessResult.success(*bot_message_ids)
 
+    def _ydl_opts(self, tmp: Path) -> dict[str, object]:
+        opts: dict[str, object] = {
+            "format": "b[height<=720][ext=mp4]/b[ext=mp4]/b",
+            "outtmpl": str(tmp / "%(id)s.%(ext)s"),
+            "quiet": True,
+            "no_warnings": True,
+            "noprogress": True,
+            "noplaylist": True,
+            "max_filesize": self._max_filesize,
+            "match_filter": match_filter_func(f"duration <=? {self._max_duration}"),
+        }
+        if self._cookies_file:
+            opts["cookiefile"] = self._cookies_file
+        return opts
+
     def _download(self, url: str) -> bytes | None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
-            opts = {
-                "format": "b[height<=720][ext=mp4]/b[ext=mp4]/b",
-                "outtmpl": str(tmp / "%(id)s.%(ext)s"),
-                "quiet": True,
-                "no_warnings": True,
-                "noprogress": True,
-                "noplaylist": True,
-                "max_filesize": self._max_filesize,
-                "match_filter": match_filter_func(f"duration <=? {self._max_duration}"),
-            }
+            opts = self._ydl_opts(tmp)
             with YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
             if info is None:

@@ -18,6 +18,7 @@ def build_update_handlers(
         instagram_password=settings.instagram_password,
         instagram_session_file=settings.instagram_session_file,
         instagram_cookies_file=settings.instagram_cookies_file,
+        tiktok_cookies_file=settings.tiktok_cookies_file,
     )
     return (
         GroupMessageHandler(platform_handlers, message_repo),
