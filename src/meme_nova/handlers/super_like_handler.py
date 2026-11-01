@@ -45,8 +45,8 @@ class SuperLikeHandler(Handler):
         response = {
             "added": "Потужний лайк зараховано!",
             "already_today": "You already used today's Super Like.",
-            "self": "You can't Super Like your own video.",
-            "unknown": "This video is no longer available for Super Likes.",
+            "self": "You can't Super Like your own post.",
+            "unknown": "This post is no longer available for Super Likes.",
         }[result]
         await query.answer(response)
 

@@ -16,6 +16,10 @@ Instagram URL
 ```
 
 Code: `src/meme_nova/platforms/instagram.py` → fallback in `gallery_dl.py`.
+The fallback names Instagram files with gallery-dl's carousel position (`num`)
+before the media ID, then sorts that position numerically. This preserves the
+original image order even when media IDs are unrelated or the carousel has more
+than nine items.
 
 | Content | Tool | Auth |
 |---------|------|------|

@@ -1,16 +1,24 @@
 import logging
+import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-from .base import TELEGRAM_BOT_UPLOAD_LIMIT_BYTES
+from .base import TELEGRAM_BOT_UPLOAD_LIMIT_BYTES, host_matches
 
 logger = logging.getLogger(__name__)
 
 PHOTO_EXTS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
 VIDEO_EXTS = frozenset({".mp4", ".mov", ".webm", ".mkv", ".avi"})
 GALLERY_DL_TIMEOUT_SECONDS = 60
+
+
+def _natural_path_key(path: Path) -> tuple[tuple[int, int | str], ...]:
+    return tuple(
+        (1, int(part)) if part.isdecimal() else (0, part.casefold())
+        for part in re.split(r"(\d+)", path.as_posix())
+    )
 
 
 def download_media(
@@ -20,6 +28,9 @@ def download_media(
 ) -> list[tuple[bytes, bool]]:
     with tempfile.TemporaryDirectory() as tmpdir:
         cmd = [sys.executable, "-m", "gallery_dl", "--quiet", "--dest", tmpdir]
+        is_instagram = host_matches(url, ("instagram.com", "instagr.am"))
+        if is_instagram:
+            cmd += ["--filename", "{num}_{media_id}.{extension}"]
         if cookies_file:
             cmd += ["--cookies", cookies_file]
         cmd.append(url)
@@ -44,7 +55,8 @@ def download_media(
                 result.stderr.decode(errors="replace")[:500],
             )
         media: list[tuple[bytes, bool]] = []
-        for path in sorted(Path(tmpdir).rglob("*")):
+        paths = Path(tmpdir).rglob("*")
+        for path in sorted(paths, key=_natural_path_key if is_instagram else None):
             if not path.is_file():
                 continue
             ext = path.suffix.lower()
