@@ -16,6 +16,11 @@ Videos use yt-dlp with Chrome TLS impersonation (no cookies). Photos fall back
 to gallery-dl and need `INSTAGRAM_COOKIES_FILE`. Details, failure modes, and
 cookie refresh: [docs/instagram.md](docs/instagram.md).
 
+### YouTube
+
+Set `YOUTUBE_COOKIES_FILE` to a Netscape-format cookie file to use a browser
+session for YouTube downloads. Setup: [docs/youtube.md](docs/youtube.md).
+
 ## Run
 
 ```bash

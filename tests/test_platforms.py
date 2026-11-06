@@ -11,6 +11,7 @@ from meme_nova.platforms import (
 )
 from meme_nova.platforms.tiktok import TikTokHandler
 from meme_nova.platforms.youtube import YouTubeHandler
+from meme_nova.platforms.ytdlp import YtDlpHandler
 
 HANDLERS = build_handlers()
 
@@ -78,3 +79,19 @@ def test_tiktok_cookies_are_not_used_by_other_yt_dlp_handlers() -> None:
 
     assert tiktok._ydl_opts(Path("/tmp"))["cookiefile"] == "/tmp/tiktok-cookies.txt"
     assert "cookiefile" not in youtube._ydl_opts(Path("/tmp"))
+
+
+def test_youtube_cookies_are_only_used_by_youtube() -> None:
+    handlers = build_handlers(
+        youtube_cookies_file="/tmp/youtube-cookies.txt",
+        tiktok_cookies_file="/tmp/tiktok-cookies.txt",
+    )
+    for handler in handlers:
+        if isinstance(handler, YtDlpHandler):
+            opts = handler._ydl_opts(Path("/tmp"))
+            if isinstance(handler, YouTubeHandler):
+                assert opts["cookiefile"] == "/tmp/youtube-cookies.txt"
+            elif isinstance(handler, TikTokHandler):
+                assert opts["cookiefile"] == "/tmp/tiktok-cookies.txt"
+            else:
+                assert "cookiefile" not in opts

@@ -13,6 +13,7 @@ class Settings:
     instagram_session_file: str | None
     instagram_cookies_file: str | None
     tiktok_cookies_file: str | None
+    youtube_cookies_file: str | None
     db_path: str
 
     @classmethod
@@ -29,5 +30,6 @@ class Settings:
             instagram_session_file=os.environ.get("INSTAGRAM_SESSION_FILE") or None,
             instagram_cookies_file=os.environ.get("INSTAGRAM_COOKIES_FILE") or None,
             tiktok_cookies_file=os.environ.get("TIKTOK_COOKIES_FILE") or None,
+            youtube_cookies_file=os.environ.get("YOUTUBE_COOKIES_FILE") or None,
             db_path=os.environ.get("DB_PATH", "meme_nova.db"),
         )

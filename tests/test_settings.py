@@ -17,6 +17,7 @@ def test_load_uses_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("INSTAGRAM_PASSWORD", raising=False)
     monkeypatch.delenv("INSTAGRAM_SESSION_FILE", raising=False)
     monkeypatch.delenv("TIKTOK_COOKIES_FILE", raising=False)
+    monkeypatch.delenv("YOUTUBE_COOKIES_FILE", raising=False)
     monkeypatch.setattr("meme_nova.settings.load_dotenv", lambda: None)
     s = Settings.load()
     assert s.telegram_bot_token == "abc"
@@ -25,6 +26,7 @@ def test_load_uses_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.instagram_password is None
     assert s.instagram_session_file is None
     assert s.tiktok_cookies_file is None
+    assert s.youtube_cookies_file is None
 
 
 def test_load_reads_instagram_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -44,3 +46,11 @@ def test_load_reads_tiktok_cookies_file(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("TIKTOK_COOKIES_FILE", "/tmp/tiktok-cookies.txt")
     monkeypatch.setattr("meme_nova.settings.load_dotenv", lambda: None)
     assert Settings.load().tiktok_cookies_file == "/tmp/tiktok-cookies.txt"
+
+
+@pytest.mark.parametrize("value", ["/tmp/youtube-cookies.txt", ""])
+def test_load_reads_youtube_cookies_file(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "abc")
+    monkeypatch.setenv("YOUTUBE_COOKIES_FILE", value)
+    monkeypatch.setattr("meme_nova.settings.load_dotenv", lambda: None)
+    assert Settings.load().youtube_cookies_file == (value or None)
