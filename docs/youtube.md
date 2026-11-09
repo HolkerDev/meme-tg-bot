@@ -33,6 +33,10 @@ solver scripts. See the [yt-dlp JavaScript setup guide](https://github.com/yt-dl
 Missing runtime support can produce `n challenge solving failed` followed by
 `No video formats found`, even with valid cookies.
 
+YouTube often offers separate video and audio streams. The bot prefers streams
+up to 720p and uses FFmpeg to merge them into one MP4 before uploading. FFmpeg
+must be available in the bot's `PATH`.
+
 Verify with a real video URL without downloading media:
 
 ```bash
